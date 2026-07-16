@@ -1,6 +1,0 @@
-2026-07-16T09:14:02Z INFO  user [REDACTED:email] logged in from [REDACTED:ipv4]
-2026-07-16T09:14:05Z DEBUG session token issued, callback to [REDACTED:ipv4]
-2026-07-16T09:15:11Z WARN  payment update for SSN [REDACTED:ssn] requested
-2026-07-16T09:15:40Z INFO  support callback scheduled: [REDACTED:us_phone]
-2026-07-16T09:16:02Z ERROR aws credential leaked in env dump: [REDACTED:aws_access_key]
-2026-07-16T09:16:30Z INFO  routine health check passed, no client data touched

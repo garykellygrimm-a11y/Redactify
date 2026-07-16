@@ -1,0 +1,29 @@
+# --- Rust Build Artifacts ---
+/target/
+
+# --- IDEs and Text Editors ---
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*~
+
+# --- System Files ---
+Thumbs.db
+.DS_Store
+ehthumbs.db
+Desktop.ini
+
+# --- Environment and Credentials ---
+.env
+*.pem
+*.key
+
+# --- Editor Backup and Line Ending Artifacts ---
+*.bak
+*.tmp
+*.patch
+*.diff

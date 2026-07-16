@@ -1,0 +1,13 @@
+name: Assert Branch Naming Convention
+on: [push]
+
+jobs:
+  check-branch-name:
+    runs-name: Validate Branch Name Structure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Regex Match
+        uses: deepakputhraya/action-branch-name@master
+        with:
+          regex: '^(feature|bugfix|hotfix|refactor|chore|docs)\/[a-z0-9-]+$'
+          allowed_branch_regex: '^(main)$'

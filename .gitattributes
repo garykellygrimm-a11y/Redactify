@@ -1,0 +1,18 @@
+# Set the default behavior to automatically normalize line endings
+* text=auto
+
+# Explicitly declare text files that must use LF
+*.rs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+
+# Force Windows-specific files to keep CRLF if explicitly needed
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Denote binary files
+*.png binary
+*.jpg binary
+*.jpeg binary

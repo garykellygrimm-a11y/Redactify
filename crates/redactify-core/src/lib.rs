@@ -1,5 +1,15 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+/// A single detected instance of sensitive content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Finding {
+    pub start: usize,
+    pub end: usize,
+    pub rule_id: String,
+}
+
+/// Scan `text` for sensitive content. (Stub — detection engine lands in Milestone 1.)
+pub fn detect(text: &str) -> Vec<Finding> {
+    let _ = text;
+    Vec::new()
 }
 
 #[cfg(test)]
@@ -7,8 +17,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+    fn detect_returns_empty_for_now() {
+        assert!(detect("nothing sensitive here").is_empty());
     }
 }

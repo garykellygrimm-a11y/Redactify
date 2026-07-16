@@ -1,7 +1,8 @@
 [package]
 name = "redactify-cli"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
 redactify-core = { path = "../redactify-core" }
+clap = { version = "4", features = ["derive"] }

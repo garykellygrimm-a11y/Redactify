@@ -1,3 +1,3 @@
 fn main() {
-    println!("Hello, world!");
+    println!("redactify {}", env!("CARGO_PKG_VERSION"));
 }

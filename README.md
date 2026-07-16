@@ -55,4 +55,17 @@ $ head -3 clean.log
 
 ## Building from source
 
-Requires the
+Requires the [Rust toolchain](https://rustup.rs/).
+
+```console
+$ git clone https://github.com/garykellygrimm-a11y/Redactify.git
+$ cd Redactify
+$ cargo build --release
+$ ./target/release/redactify-cli tests/fixtures/sample.log
+```
+
+Run the test suite with `cargo test`.
+
+## Architecture
+
+Cargo workspace with a strict core/frontend split:

@@ -1,0 +1,6 @@
+2026-07-16T09:14:02Z INFO  user bob.kelly@example.com logged in from 192.168.1.254
+2026-07-16T09:14:05Z DEBUG session token issued, callback to 10.0.0.17
+2026-07-16T09:15:11Z WARN  payment update for SSN 123-45-6789 requested
+2026-07-16T09:15:40Z INFO  support callback scheduled: (816) 555-0142
+2026-07-16T09:16:02Z ERROR aws credential leaked in env dump: AKIAIOSFODNN7EXAMPLE
+2026-07-16T09:16:30Z INFO  routine health check passed, no client data touched

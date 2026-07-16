@@ -55,7 +55,7 @@ pub fn builtin_rules() -> Vec<Rule> {
         Rule::new(
             "us_phone",
             "US Phone Number",
-            r"\b(?:\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}\b",
+            r"(?:\+?1[-. ]?)?(?:\(\d{3}\)|\b\d{3})[-. ]?\d{3}[-. ]?\d{4}\b",
         ),
         // AWS access key IDs: AKIA (long-term) or ASIA (temporary) + 16
         // uppercase alphanumerics. Fixed prefix makes this a HIGH-confidence

@@ -8,15 +8,64 @@ pub use rules::{builtin_rules, Rule};
 /// Scan `text` with `rules`, returning findings sorted by start offset,
 /// with overlaps resolved (earliest start wins; on a tie, longest match wins).
 pub fn detect(text: &str, rules: &[Rule]) -> Vec<Finding> {
-    let _ = (text, rules);
-    todo!("Milestone 1: yours to write")
+    let mut findings: Vec<Finding> = Vec::new();
+
+    for rule in rules {
+        for m in rule.pattern.find_iter(text) {
+            findings.push(Finding {
+                start: m.start(),
+                end: m.end(),
+                // .clone() because this Finding must OWN its rule_id — the
+                // rule keeps living its own life; we can't borrow from it
+                // forever. Same story for matched: as_str() borrows from
+                // `text`, to_string() copies it into something we own.
+                rule_id: rule.id.clone(),
+                matched: m.as_str().to_string(),
+            });
+        }
+    }
+
+    // Sort by start ascending; break ties by end DESCENDING, so when two
+    // matches begin at the same offset, the longer one comes first and
+    // therefore wins the overlap filter below.
+    findings.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
+
+    // Overlap resolution in one pass: keep a finding only if it starts at or
+    // after the end of the last finding we kept. Because of the sort order,
+    // "first seen" is always the earliest-starting (then longest) claimant.
+    let mut resolved: Vec<Finding> = Vec::new();
+    for f in findings {
+        match resolved.last() {
+            Some(prev) if f.start < prev.end => {
+                // Overlaps something we already kept — drop it on the floor.
+            }
+            _ => resolved.push(f),
+        }
+    }
+
+    resolved
 }
 
 /// Replace each finding's span with `[REDACTED:{rule_id}]`.
 /// Assumes `findings` is sorted and non-overlapping (detect guarantees this).
 pub fn redact(text: &str, findings: &[Finding]) -> String {
-    let _ = (text, findings);
-    todo!("Milestone 1: yours to write")
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+
+    for f in findings {
+        // Copy the untouched text between the last finding and this one...
+        out.push_str(&text[cursor..f.start]);
+        // ...then the token instead of the sensitive span...
+        out.push_str("[REDACTED:");
+        out.push_str(&f.rule_id);
+        out.push(']');
+        // ...and jump the cursor past what we just replaced.
+        cursor = f.end;
+    }
+
+    // Whatever remains after the final finding.
+    out.push_str(&text[cursor..]);
+    out
 }
 
 #[cfg(test)]

@@ -37,7 +37,12 @@ fn segment(text: &str, findings: &[Finding]) -> Vec<Vec<Segment>> {
     for line in text.split_inclusive('\n') {
         let line_start = cursor;
         let line_end = cursor + line.len();
-        let content_end = line_end - line.chars().rev().take_while(|c| *c == '\n' || *c == '\r').count();
+        let content_end = line_end
+            - line
+                .chars()
+                .rev()
+                .take_while(|c| *c == '\n' || *c == '\r')
+                .count();
 
         let mut pos = line_start;
         while next < findings.len() && findings[next].start < content_end {
@@ -75,8 +80,8 @@ fn segment(text: &str, findings: &[Finding]) -> Vec<Vec<Segment>> {
 #[tauri::command]
 fn open_file(path: String) -> Result<ScanOutcome, String> {
     let start = Instant::now();
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Could not read '{path}': {e}"))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("Could not read '{path}': {e}"))?;
     let findings = detect(&text, &builtin_rules());
     let lines = segment(&text, &findings);
     Ok(ScanOutcome {

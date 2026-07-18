@@ -27,3 +27,8 @@ Desktop.ini
 *.tmp
 *.patch
 *.diff
+
+# --- Generated Test Output ---
+clean.log
+audit.json
+*.redacted

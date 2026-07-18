@@ -5,7 +5,7 @@ mod rules;
 
 pub use error::RedactifyError;
 pub use finding::Finding;
-pub use manifest::{Manifest, ManifestFinding, sha256_hex};
+pub use manifest::{Disposition, Manifest, ManifestFinding, sha256_hex};
 pub use rules::{Rule, builtin_rules, load_rules_file, merge_rules};
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,

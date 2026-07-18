@@ -69,7 +69,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(path) = &cli.manifest {
         let tool = format!("redactify {}", env!("CARGO_PKG_VERSION"));
-        let manifest = Manifest::new(&tool, &text, &redacted, &rules, &findings);
+        let manifest = Manifest::unreviewed(&tool, &text, &redacted, &rules, &findings);
         fs::write(path, manifest.to_json()?)
             .map_err(|e| format!("could not write manifest '{}': {e}", path.display()))?;
     }

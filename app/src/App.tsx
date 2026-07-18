@@ -15,10 +15,15 @@ export interface Finding {
   matched: string;
 }
 
+export interface Segment {
+  text: string;
+  finding: number | null;
+}
+
 export interface ScanOutcome {
   path: string;
-  text: string;
   findings: Finding[];
+  lines: Segment[][];
   line_count: number;
   elapsed_ms: number;
 }
@@ -31,11 +36,13 @@ function App() {
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [focusedFinding, setFocusedFinding] = useState<number | null>(null);
   const dragging = useRef(false);
 
   const loadPath = useCallback(async (path: string) => {
     try {
       setError(null);
+      setFocusedFinding(null);
       setOutcome(await invoke<ScanOutcome>("open_file", { path }));
     } catch (e) {
       setError(String(e));
@@ -97,7 +104,11 @@ function App() {
       )}
       <div className="flex min-h-0 flex-1">
         <div style={{ width: sidebarWidth }} className="shrink-0">
-          <Sidebar outcome={outcome} />
+          <Sidebar
+            outcome={outcome}
+            focusedFinding={focusedFinding}
+            onFocus={setFocusedFinding}
+          />
         </div>
         <div
           onMouseDown={onDividerDown}
@@ -105,7 +116,12 @@ function App() {
           title="Drag to resize"
         />
         <div className="min-w-0 flex-1">
-          <DocumentView outcome={outcome} dragOver={dragOver} onBrowse={browse} />
+          <DocumentView
+            outcome={outcome}
+            dragOver={dragOver}
+            focusedFinding={focusedFinding}
+            onBrowse={browse}
+          />
         </div>
       </div>
       <VerdictStrip outcome={outcome} />

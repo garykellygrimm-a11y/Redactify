@@ -1,12 +1,38 @@
+import { useEffect, useMemo, useRef } from "react";
 import type { ScanOutcome } from "../App";
 
 interface Props {
   outcome: ScanOutcome | null;
   dragOver: boolean;
+  focusedFinding: number | null;
   onBrowse: () => void;
 }
 
-export function DocumentView({ outcome, dragOver, onBrowse }: Props) {
+/** Stable rule_id -> palette slot (1-5). Same rule, same hue, every file. */
+export function ruleHue(ruleId: string, ruleIds: string[]): number {
+  return (ruleIds.indexOf(ruleId) % 5) + 1;
+}
+
+export function DocumentView({
+  outcome,
+  dragOver,
+  focusedFinding,
+  onBrowse,
+}: Props) {
+  const focusedRef = useRef<HTMLElement | null>(null);
+
+  const ruleIds = useMemo(
+    () =>
+      outcome
+        ? [...new Set(outcome.findings.map((f) => f.rule_id))].sort()
+        : [],
+    [outcome],
+  );
+
+  useEffect(() => {
+    focusedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusedFinding]);
+
   if (!outcome) {
     return (
       <section
@@ -34,16 +60,41 @@ export function DocumentView({ outcome, dragOver, onBrowse }: Props) {
     );
   }
 
-  const lines = outcome.text.split("\n");
   return (
     <section className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6">
       <div className="min-w-max px-0 py-2">
-        {lines.map((line, i) => (
+        {outcome.lines.map((segments, i) => (
           <div key={i} className="flex">
             <span className="w-12 shrink-0 select-none pr-3 text-right text-muted/60">
               {i + 1}
             </span>
-            <span className="whitespace-pre">{line}</span>
+            <span className="whitespace-pre">
+              {segments.map((seg, j) =>
+                seg.finding === null ? (
+                  <span key={j}>{seg.text}</span>
+                ) : (
+                  <mark
+                    key={j}
+                    ref={seg.finding === focusedFinding ? focusedRef : null}
+                    className="rounded-sm px-0.5"
+                    style={{
+                      background: `color-mix(in srgb, var(--rule-${ruleHue(
+                        outcome.findings[seg.finding].rule_id,
+                        ruleIds,
+                      )}) 22%, transparent)`,
+                      color: "inherit",
+                      outline:
+                        seg.finding === focusedFinding
+                          ? "2px solid var(--accent)"
+                          : "none",
+                    }}
+                    title={outcome.findings[seg.finding].rule_id}
+                  >
+                    {seg.text}
+                  </mark>
+                ),
+              )}
+            </span>
           </div>
         ))}
       </div>

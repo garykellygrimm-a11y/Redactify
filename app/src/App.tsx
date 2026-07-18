@@ -1,53 +1,131 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { TopBar } from "./components/TopBar";
+import { Sidebar } from "./components/Sidebar";
+import { DocumentView } from "./components/DocumentView";
+import { VerdictStrip } from "./components/VerdictStrip";
 import "./App.css";
 
-interface Finding {
+export interface Finding {
   start: number;
   end: number;
   rule_id: string;
   matched: string;
 }
 
-function App() {
-  const [text, setText] = useState("");
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [scanned, setScanned] = useState(false);
+export interface Segment {
+  text: string;
+  finding: number | null;
+}
 
-  async function scan() {
-    const result = await invoke<Finding[]>("scan_text", { text });
-    setFindings(result);
-    setScanned(true);
-  }
+export interface ScanOutcome {
+  path: string;
+  findings: Finding[];
+  lines: Segment[][];
+  line_count: number;
+  elapsed_ms: number;
+}
+
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 480;
+
+function App() {
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [focusedFinding, setFocusedFinding] = useState<number | null>(null);
+  const dragging = useRef(false);
+
+  const loadPath = useCallback(async (path: string) => {
+    try {
+      setError(null);
+      setFocusedFinding(null);
+      setOutcome(await invoke<ScanOutcome>("open_file", { path }));
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
+
+  const browse = useCallback(async () => {
+    const picked = await openDialog({ multiple: false, directory: false });
+    if (typeof picked === "string") await loadPath(picked);
+  }, [loadPath]);
+
+  // Native drag-and-drop: Tauri surfaces real file paths, which the
+  // browser's own drop events cannot do inside a webview.
+  useEffect(() => {
+    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
+      if (event.payload.type === "over") setDragOver(true);
+      else if (event.payload.type === "drop") {
+        setDragOver(false);
+        const first = event.payload.paths[0];
+        if (first) void loadPath(first);
+      } else setDragOver(false);
+    });
+    return () => {
+      void unlisten.then((f) => f());
+    };
+  }, [loadPath]);
+
+  const onDividerDown = useCallback(() => {
+    dragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!dragging.current) return;
+      setSidebarWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX)));
+    }
+    function onUp() {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   return (
-    <main style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui" }}>
-      <h1>Redactify</h1>
-      <p>Paste text and scan it with the builtin rules — IPC plumbing proof.</p>
-      <textarea
-        rows={10}
-        style={{ width: "100%", fontFamily: "monospace" }}
-        value={text}
-        onChange={(e) => setText(e.currentTarget.value)}
-        placeholder="Paste log content here…"
-      />
-      <button onClick={scan} style={{ marginTop: "0.5rem" }}>
-        Scan
-      </button>
-      {scanned && (
-        <section>
-          <h2>{findings.length} finding(s)</h2>
-          <ul>
-            {findings.map((f, i) => (
-              <li key={i}>
-                <code>{f.rule_id}</code> at {f.start}–{f.end}:{" "}
-                <code>{f.matched}</code>
-              </li>
-            ))}
-          </ul>
-        </section>
+    <div className="flex h-screen flex-col font-sans">
+      <TopBar />
+      {error && (
+        <div className="border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending">
+          {error}
+        </div>
       )}
-    </main>
+      <div className="flex min-h-0 flex-1">
+        <div style={{ width: sidebarWidth }} className="shrink-0">
+          <Sidebar
+            outcome={outcome}
+            focusedFinding={focusedFinding}
+            onFocus={setFocusedFinding}
+          />
+        </div>
+        <div
+          onMouseDown={onDividerDown}
+          className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-accent"
+          title="Drag to resize"
+        />
+        <div className="min-w-0 flex-1">
+          <DocumentView
+            outcome={outcome}
+            dragOver={dragOver}
+            focusedFinding={focusedFinding}
+            onBrowse={browse}
+          />
+        </div>
+      </div>
+      <VerdictStrip outcome={outcome} />
+    </div>
   );
 }
 

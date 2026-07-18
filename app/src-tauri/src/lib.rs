@@ -1,14 +1,17 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use redactify_core::{builtin_rules, detect, Finding};
+
+/// Scan raw text with the builtin rules. First proof of the IPC
+/// boundary: all detection stays in Rust; the frontend only ever
+/// receives findings.
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn scan_text(text: String) -> Vec<Finding> {
+    detect(&text, &builtin_rules())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![scan_text])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("error while running tauri application")
 }

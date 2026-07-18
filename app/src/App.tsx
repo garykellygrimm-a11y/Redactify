@@ -1,53 +1,61 @@
-import { useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { TopBar } from "./components/TopBar";
+import { Sidebar } from "./components/Sidebar";
+import { DocumentView } from "./components/DocumentView";
+import { VerdictStrip } from "./components/VerdictStrip";
 import "./App.css";
 
-interface Finding {
-  start: number;
-  end: number;
-  rule_id: string;
-  matched: string;
-}
+const SIDEBAR_MIN = 220;
+const SIDEBAR_MAX = 480;
 
 function App() {
-  const [text, setText] = useState("");
-  const [findings, setFindings] = useState<Finding[]>([]);
-  const [scanned, setScanned] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(300);
+  const dragging = useRef(false);
 
-  async function scan() {
-    const result = await invoke<Finding[]>("scan_text", { text });
-    setFindings(result);
-    setScanned(true);
-  }
+  const onDividerDown = useCallback(() => {
+    dragging.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    function onMove(e: MouseEvent) {
+      if (!dragging.current) return;
+      setSidebarWidth(
+        Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX)),
+      );
+    }
+    function onUp() {
+      dragging.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, []);
 
   return (
-    <main style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui" }}>
-      <h1>Redactify</h1>
-      <p>Paste text and scan it with the builtin rules — IPC plumbing proof.</p>
-      <textarea
-        rows={10}
-        style={{ width: "100%", fontFamily: "monospace" }}
-        value={text}
-        onChange={(e) => setText(e.currentTarget.value)}
-        placeholder="Paste log content here…"
-      />
-      <button onClick={scan} style={{ marginTop: "0.5rem" }}>
-        Scan
-      </button>
-      {scanned && (
-        <section>
-          <h2>{findings.length} finding(s)</h2>
-          <ul>
-            {findings.map((f, i) => (
-              <li key={i}>
-                <code>{f.rule_id}</code> at {f.start}–{f.end}:{" "}
-                <code>{f.matched}</code>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-    </main>
+    <div className="flex h-screen flex-col font-sans">
+      <TopBar />
+      <div className="flex min-h-0 flex-1">
+        <div style={{ width: sidebarWidth }} className="shrink-0">
+          <Sidebar />
+        </div>
+        <div
+          onMouseDown={onDividerDown}
+          className="w-1 shrink-0 cursor-col-resize bg-border hover:bg-accent"
+          title="Drag to resize"
+        />
+        <div className="min-w-0 flex-1">
+          <DocumentView />
+        </div>
+      </div>
+      <VerdictStrip />
+    </div>
   );
 }
 

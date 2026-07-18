@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef } from "react";
 import type { ScanOutcome } from "../App";
+import type { Review } from "../review";
 
 interface Props {
   outcome: ScanOutcome | null;
+  review: Review;
   dragOver: boolean;
-  focusedFinding: number | null;
   onBrowse: () => void;
 }
 
@@ -13,12 +14,7 @@ export function ruleHue(ruleId: string, ruleIds: string[]): number {
   return (ruleIds.indexOf(ruleId) % 5) + 1;
 }
 
-export function DocumentView({
-  outcome,
-  dragOver,
-  focusedFinding,
-  onBrowse,
-}: Props) {
+export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
   const focusedRef = useRef<HTMLElement | null>(null);
 
   const ruleIds = useMemo(
@@ -31,7 +27,7 @@ export function DocumentView({
 
   useEffect(() => {
     focusedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [focusedFinding]);
+  }, [review.focused]);
 
   if (!outcome) {
     return (
@@ -69,31 +65,66 @@ export function DocumentView({
               {i + 1}
             </span>
             <span className="whitespace-pre">
-              {segments.map((seg, j) =>
-                seg.finding === null ? (
-                  <span key={j}>{seg.text}</span>
-                ) : (
+              {segments.map((seg, j) => {
+                if (seg.finding === null)
+                  return <span key={j}>{seg.text}</span>;
+
+                const idx = seg.finding;
+                const state = review.states[idx];
+                const focused = idx === review.focused;
+                const focusRing = focused
+                  ? { outline: "2px solid var(--accent)", outlineOffset: "1px" }
+                  : {};
+
+                // ACCEPTED: the live preview — text collapses to its token.
+                if (state === "accepted") {
+                  return (
+                    <mark
+                      key={j}
+                      ref={focused ? focusedRef : null}
+                      className="rounded-sm bg-accepted-soft px-1 font-medium text-accepted"
+                      style={focusRing}
+                      title={`accepted · was: ${seg.text}`}
+                    >
+                      [REDACTED:{outcome.findings[idx].rule_id}]
+                    </mark>
+                  );
+                }
+
+                // REJECTED: plain text, dotted underline keeps it findable.
+                if (state === "rejected") {
+                  return (
+                    <span
+                      key={j}
+                      ref={focused ? focusedRef : null}
+                      className="rounded-sm px-0.5 [text-decoration:underline_dotted] decoration-rejected"
+                      style={focusRing}
+                      title={`rejected · ${outcome.findings[idx].rule_id}`}
+                    >
+                      {seg.text}
+                    </span>
+                  );
+                }
+
+                // PENDING: amber, awaiting judgment.
+                return (
                   <mark
                     key={j}
-                    ref={seg.finding === focusedFinding ? focusedRef : null}
-                    className="rounded-sm px-0.5"
+                    ref={focused ? focusedRef : null}
+                    className="rounded-sm bg-pending-soft px-0.5 text-text"
                     style={{
-                      background: `color-mix(in srgb, var(--rule-${ruleHue(
-                        outcome.findings[seg.finding].rule_id,
+                      boxShadow: `inset 0 -2px 0 var(--rule-${ruleHue(
+                        outcome.findings[idx].rule_id,
                         ruleIds,
-                      )}) 22%, transparent)`,
-                      color: "inherit",
-                      outline:
-                        seg.finding === focusedFinding
-                          ? "2px solid var(--accent)"
-                          : "none",
+                      )})`,
+                      ...focusRing,
                     }}
-                    title={outcome.findings[seg.finding].rule_id}
+                    title={`pending · ${outcome.findings[idx].rule_id}`}
                   >
                     {seg.text}
                   </mark>
-                ),
-              )}
+                );
+              })}
             </span>
           </div>
         ))}

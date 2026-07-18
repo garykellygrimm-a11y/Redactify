@@ -169,7 +169,14 @@ mod tests {
             .collect();
         let output = redact(text, &accepted);
 
-        let m = Manifest::new("redactify test", text, &output, &rules, &findings, &dispositions);
+        let m = Manifest::new(
+            "redactify test",
+            text,
+            &output,
+            &rules,
+            &findings,
+            &dispositions,
+        );
         assert_eq!(m.finding_count, 2);
         assert_eq!(m.applied_count, 1);
         assert_eq!(m.findings[1].disposition, Disposition::Rejected);
@@ -184,8 +191,7 @@ mod tests {
         let text = "SSN 123-45-6789 on file";
         let findings = detect(text, &rules);
         let output = redact(text, &findings);
-        let original =
-            Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
+        let original = Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
 
         let json = original.to_json().expect("serialization");
         let parsed: Manifest = serde_json::from_str(&json).expect("deserialization");
@@ -207,9 +213,16 @@ mod tests {
             .map(|(f, _)| f.clone())
             .collect();
         let output = redact(text, &accepted);
-        let json = Manifest::new("redactify test", text, &output, &rules, &findings, &dispositions)
-            .to_json()
-            .expect("serialization");
+        let json = Manifest::new(
+            "redactify test",
+            text,
+            &output,
+            &rules,
+            &findings,
+            &dispositions,
+        )
+        .to_json()
+        .expect("serialization");
 
         assert!(!json.contains("AKIAIOSFODNN7EXAMPLE"));
         assert!(!json.contains("bob@example.com"));

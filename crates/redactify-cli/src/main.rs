@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use redactify_core::{Manifest, builtin_rules, detect, redact};
+use redactify_core::{builtin_rules, detect, load_rules_file, merge_rules, redact, Manifest};
 
 /// Scan a file for sensitive data and produce sanitized output.
 #[derive(Parser)]
@@ -20,6 +20,14 @@ struct Cli {
     /// Write a JSON audit manifest to this path
     #[arg(long)]
     manifest: Option<PathBuf>,
+
+    /// Load additional rules from a TOML file (same-id rules override builtins)
+    #[arg(long)]
+    rules: Option<PathBuf>,
+
+    /// Disable builtin rules; scan with --rules patterns only
+    #[arg(long, requires = "rules")]
+    no_builtins: bool,
 }
 
 fn main() -> ExitCode {
@@ -36,7 +44,19 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(&cli.input)
         .map_err(|e| format!("could not read '{}': {e}", cli.input.display()))?;
 
-    let rules = builtin_rules();
+    let user_rules = match &cli.rules {
+        Some(path) => load_rules_file(path)?,
+        None => Vec::new(),
+    };
+    let rules = if cli.no_builtins {
+        user_rules
+    } else {
+        merge_rules(builtin_rules(), user_rules)
+    };
+    if rules.is_empty() {
+        return Err("no rules to apply (rules file is empty and builtins are disabled)".into());
+    }
+
     let findings = detect(&text, &rules);
     let redacted = redact(&text, &findings);
 

@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use redactify_core::{builtin_rules, detect, redact, sha256_hex, Disposition, Finding, Manifest};
 use serde::Serialize;
-use tauri::State;
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{Emitter, State};
 
 /// One render-ready piece of a line: plain text, or a slice of a finding.
 #[derive(Serialize)]
@@ -27,8 +28,6 @@ struct ScanOutcome {
 }
 
 /// The open document, held on the Rust side between open and export.
-/// The frontend reviews segments; Rust keeps the text and findings that
-/// export operates on — the UI never round-trips document content.
 struct OpenDocument {
     text: String,
     findings: Vec<Finding>,
@@ -49,13 +48,11 @@ struct ExportOutcome {
 }
 
 /// Split `text` into lines of alternating plain/finding segments.
-/// Findings are sorted and non-overlapping (detect guarantees it), so a
-/// single forward walk with one cursor suffices — same shape as redact().
 fn segment(text: &str, findings: &[Finding]) -> Vec<Vec<Segment>> {
     let mut lines: Vec<Vec<Segment>> = Vec::new();
     let mut current: Vec<Segment> = Vec::new();
-    let mut cursor = 0; // byte offset into text
-    let mut next = 0; // index of the next finding to place
+    let mut cursor = 0;
+    let mut next = 0;
 
     for line in text.split_inclusive('\n') {
         let line_start = cursor;
@@ -119,9 +116,13 @@ fn open_file(path: String, state: State<AppState>) -> Result<ScanOutcome, String
     Ok(outcome)
 }
 
-/// Apply the reviewer's verdicts: write the redacted file and the
-/// manifest alongside it. `accepted` holds indices into the findings
-/// of the currently open document; everything else is Rejected.
+/// Drop the held document — the "start over" verb behind File > Close.
+#[tauri::command]
+fn close_document(state: State<AppState>) {
+    *state.0.lock().unwrap() = None;
+}
+
+/// Apply the reviewer's verdicts: write the redacted file and manifest.
 #[tauri::command]
 fn export(
     output_path: String,
@@ -181,7 +182,49 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![open_file, export])
+        .invoke_handler(tauri::generate_handler![open_file, close_document, export])
+        .setup(|app| {
+            // Native menu bar. Items the frontend must react to emit
+            // events; Exit is handled natively by the predefined item.
+            let open = MenuItem::with_id(app, "open", "Open…", true, Some("CmdOrCtrl+O"))?;
+            let close_doc = MenuItem::with_id(
+                app,
+                "close_document",
+                "Close Document",
+                true,
+                Some("CmdOrCtrl+W"),
+            )?;
+            let file = Submenu::with_items(
+                app,
+                "File",
+                true,
+                &[
+                    &open,
+                    &close_doc,
+                    &PredefinedMenuItem::separator(app)?,
+                    &PredefinedMenuItem::quit(app, Some("Exit"))?,
+                ],
+            )?;
+
+            let theme = MenuItem::with_id(
+                app,
+                "toggle_theme",
+                "Toggle Theme",
+                true,
+                Some("CmdOrCtrl+T"),
+            )?;
+            let view = Submenu::with_items(app, "View", true, &[&theme])?;
+
+            let menu = Menu::with_items(app, &[&file, &view])?;
+            app.set_menu(menu)?;
+
+            app.on_menu_event(|app, event| {
+                // Forward UI-relevant items to the frontend as one event.
+                let _ = app.emit("menu", event.id().0.clone());
+            });
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
 }

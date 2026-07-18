@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
@@ -7,6 +8,7 @@ import { Sidebar } from "./components/Sidebar";
 import { DocumentView } from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
 import { ExportSuccess } from "./components/ExportSuccess";
+import { toggleTheme } from "./theme";
 import {
   Review,
   decide,
@@ -85,6 +87,14 @@ function App() {
     if (typeof picked === "string") await loadPath(picked);
   }, [loadPath]);
 
+  const closeDocument = useCallback(async () => {
+    await invoke("close_document");
+    setOutcome(null);
+    setReview(emptyReview(0));
+    setExportResult(null);
+    setError(null);
+  }, []);
+
   const doExport = useCallback(async () => {
     if (!outcome) return;
     const target = await saveDialog({
@@ -106,6 +116,26 @@ function App() {
       setError(String(e));
     }
   }, [outcome, review.states]);
+
+  // Native menu events from Rust: one channel, routed by id.
+  useEffect(() => {
+    const unlisten = listen<string>("menu", (event) => {
+      switch (event.payload) {
+        case "open":
+          void browse();
+          break;
+        case "close_document":
+          void closeDocument();
+          break;
+        case "toggle_theme":
+          toggleTheme();
+          break;
+      }
+    });
+    return () => {
+      void unlisten.then((f) => f());
+    };
+  }, [browse, closeDocument]);
 
   // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo.
   useEffect(() => {

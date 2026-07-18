@@ -1,0 +1,18 @@
+# Example custom detection rules for Redactify.
+#
+#   redactify input.log --rules examples/custom-rules.toml
+#
+# A rule whose id matches a builtin (email, ipv4, ssn, us_phone,
+# aws_access_key) REPLACES that builtin. Patterns use Rust regex
+# syntax: no lookahead/lookbehind; anchor with \b word boundaries.
+
+[[rules]]
+id = "cui_marker"
+name = "CUI Banner Marking"
+# (?i) makes the match case-insensitive.
+pattern = '(?i)\bCUI//[A-Z]+\b'
+
+[[rules]]
+id = "internal_host"
+name = "Internal Hostname"
+pattern = '\b[a-z]{2,4}-(?:app|db|web)-\d{2}\.corp\.example\b'

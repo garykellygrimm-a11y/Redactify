@@ -44,3 +44,16 @@ verification.
   alone — accepted trade-off at this stage.
 - A regression test asserts serialized manifests never contain matched
   content.
+
+## Addendum (v0.4): dispositions
+
+With human review in the desktop app, manifest findings gain a
+`disposition` field: `accepted` (redacted in the output) or `rejected`
+(reviewer explicitly declined). All detected findings are recorded,
+including rejections — "a reviewer considered this and left it" is the
+audit evidence the review workflow exists to produce. Rejected entries
+remain content-free spans and reveal nothing without the original
+file. Unreviewed contexts (the CLI) mark every finding `accepted`,
+which is truthful: no rejection occurred. The top-level record gains
+`applied_count` alongside `finding_count` so the two totals are
+explicit.

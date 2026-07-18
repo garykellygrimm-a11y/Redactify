@@ -6,16 +6,29 @@ use crate::error::RedactifyError;
 use crate::finding::Finding;
 use crate::rules::Rule;
 
+/// What became of a finding: applied to the output, or explicitly
+/// declined by a human reviewer. In unreviewed contexts (the CLI),
+/// every finding is Accepted — no human was in the loop to reject.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Disposition {
+    Accepted,
+    Rejected,
+}
+
 /// One redaction event in the audit record.
 ///
 /// Deliberately content-free: no matched text, no per-finding hash.
-/// See docs/adr/001-manifest-content.md for the reasoning.
+/// Rejected findings ARE recorded — "a reviewer saw this and declined
+/// it" is audit evidence, not leakage; the manifest still reveals
+/// nothing without the original file. See docs/adr/001.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ManifestFinding {
     pub rule_id: String,
     pub start: usize,
     pub end: usize,
     pub length: usize,
+    pub disposition: Disposition,
 }
 
 /// Audit record for a single redaction operation.
@@ -33,7 +46,10 @@ pub struct Manifest {
     pub output_sha256: String,
     /// Ids of every rule that was active (not just ones that matched).
     pub rules_applied: Vec<String>,
+    /// All findings detected, applied or not.
     pub finding_count: usize,
+    /// How many findings were actually redacted in the output.
+    pub applied_count: usize,
     pub findings: Vec<ManifestFinding>,
 }
 
@@ -44,13 +60,26 @@ pub fn sha256_hex(data: &str) -> String {
 
 impl Manifest {
     /// Build a manifest describing one redaction run.
+    ///
+    /// `dispositions` must be the same length and order as `findings`.
+    /// For unreviewed runs, pass all-Accepted (see [`Manifest::unreviewed`]).
     pub fn new(
         tool: &str,
         source: &str,
         output: &str,
         rules: &[Rule],
         findings: &[Finding],
+        dispositions: &[Disposition],
     ) -> Manifest {
+        assert_eq!(
+            findings.len(),
+            dispositions.len(),
+            "one disposition per finding"
+        );
+        let applied_count = dispositions
+            .iter()
+            .filter(|d| **d == Disposition::Accepted)
+            .count();
         Manifest {
             tool: tool.to_string(),
             created_utc: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
@@ -58,16 +87,31 @@ impl Manifest {
             output_sha256: sha256_hex(output),
             rules_applied: rules.iter().map(|r| r.id.clone()).collect(),
             finding_count: findings.len(),
+            applied_count,
             findings: findings
                 .iter()
-                .map(|f| ManifestFinding {
+                .zip(dispositions)
+                .map(|(f, d)| ManifestFinding {
                     rule_id: f.rule_id.clone(),
                     start: f.start,
                     end: f.end,
                     length: f.end - f.start,
+                    disposition: *d,
                 })
                 .collect(),
         }
+    }
+
+    /// Manifest for a run with no human review: every finding Accepted.
+    pub fn unreviewed(
+        tool: &str,
+        source: &str,
+        output: &str,
+        rules: &[Rule],
+        findings: &[Finding],
+    ) -> Manifest {
+        let dispositions = vec![Disposition::Accepted; findings.len()];
+        Manifest::new(tool, source, output, rules, findings, &dispositions)
     }
 
     /// Serialize to pretty-printed JSON.
@@ -96,14 +140,42 @@ mod tests {
         let text = "bob@example.com logged in from 192.168.1.254";
         let findings = detect(text, &rules);
         let output = redact(text, &findings);
-        let m = Manifest::new("redactify test", text, &output, &rules, &findings);
+        let m = Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
 
         assert_eq!(m.finding_count, 2);
+        assert_eq!(m.applied_count, 2);
         assert_eq!(m.findings[0].rule_id, "email");
         assert_eq!(m.findings[0].length, "bob@example.com".len());
+        assert_eq!(m.findings[0].disposition, Disposition::Accepted);
         assert_eq!(m.source_sha256, sha256_hex(text));
         assert_eq!(m.output_sha256, sha256_hex(&output));
         assert_eq!(m.rules_applied.len(), 5);
+    }
+
+    #[test]
+    fn reviewed_manifest_records_rejections() {
+        let rules = builtin_rules();
+        let text = "bob@example.com and 10.0.0.1";
+        let findings = detect(text, &rules);
+        assert_eq!(findings.len(), 2);
+
+        // Reviewer accepts the email, rejects the IP.
+        let dispositions = [Disposition::Accepted, Disposition::Rejected];
+        let accepted: Vec<_> = findings
+            .iter()
+            .zip(&dispositions)
+            .filter(|(_, d)| **d == Disposition::Accepted)
+            .map(|(f, _)| f.clone())
+            .collect();
+        let output = redact(text, &accepted);
+
+        let m = Manifest::new("redactify test", text, &output, &rules, &findings, &dispositions);
+        assert_eq!(m.finding_count, 2);
+        assert_eq!(m.applied_count, 1);
+        assert_eq!(m.findings[1].disposition, Disposition::Rejected);
+        // The rejected IP survives in the output; the email does not.
+        assert!(output.contains("10.0.0.1"));
+        assert!(!output.contains("bob@example.com"));
     }
 
     #[test]
@@ -112,7 +184,8 @@ mod tests {
         let text = "SSN 123-45-6789 on file";
         let findings = detect(text, &rules);
         let output = redact(text, &findings);
-        let original = Manifest::new("redactify test", text, &output, &rules, &findings);
+        let original =
+            Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
 
         let json = original.to_json().expect("serialization");
         let parsed: Manifest = serde_json::from_str(&json).expect("deserialization");
@@ -122,12 +195,19 @@ mod tests {
     #[test]
     fn manifest_contains_no_matched_content() {
         // The ADR promise, executable: sensitive text must never appear
-        // in the serialized manifest.
+        // in the serialized manifest — including for rejected findings.
         let rules = builtin_rules();
         let text = "leak: AKIAIOSFODNN7EXAMPLE and bob@example.com";
         let findings = detect(text, &rules);
-        let output = redact(text, &findings);
-        let json = Manifest::new("redactify test", text, &output, &rules, &findings)
+        let dispositions = [Disposition::Accepted, Disposition::Rejected];
+        let accepted: Vec<_> = findings
+            .iter()
+            .zip(&dispositions)
+            .filter(|(_, d)| **d == Disposition::Accepted)
+            .map(|(f, _)| f.clone())
+            .collect();
+        let output = redact(text, &accepted);
+        let json = Manifest::new("redactify test", text, &output, &rules, &findings, &dispositions)
             .to_json()
             .expect("serialization");
 

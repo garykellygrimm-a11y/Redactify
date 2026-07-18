@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["crates/redactify-core", "crates/redactify-cli"]
+members = ["crates/redactify-core", "crates/redactify-cli", "app/src-tauri"]

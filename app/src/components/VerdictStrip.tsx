@@ -5,9 +5,10 @@ import { tally } from "../review";
 interface Props {
   review: Review;
   outcome: ScanOutcome | null;
+  onExport: () => void;
 }
 
-export function VerdictStrip({ review, outcome }: Props) {
+export function VerdictStrip({ review, outcome, onExport }: Props) {
   if (!outcome) {
     return (
       <footer className="flex h-11 shrink-0 items-center gap-4 border-t border-border bg-surface-raised px-4 text-sm">
@@ -33,7 +34,7 @@ export function VerdictStrip({ review, outcome }: Props) {
         {pending} pending
       </span>
       <button
-        onClick={() => alert("Export arrives in the next PR — gate is real, payload isn't.")}
+        onClick={onExport}
         disabled={!ready}
         className="ml-auto rounded-md bg-accent px-4 py-1 font-medium text-surface-raised transition-opacity disabled:opacity-40"
         title={

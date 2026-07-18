@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
 import { DocumentView } from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
+import { ExportSuccess } from "./components/ExportSuccess";
+import { toggleTheme } from "./theme";
 import {
   Review,
   decide,
@@ -37,13 +40,32 @@ export interface ScanOutcome {
   elapsed_ms: number;
 }
 
+export interface ExportOutcome {
+  output_path: string;
+  manifest_path: string;
+  source_sha256: string;
+  output_sha256: string;
+  applied_count: number;
+  rejected_count: number;
+}
+
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 480;
+
+/** Default save name: insert `.redacted` before the extension. */
+function defaultExportName(path: string): string {
+  const base = path.replace(/^.*[\\/]/, "");
+  const dot = base.lastIndexOf(".");
+  return dot > 0
+    ? `${base.slice(0, dot)}.redacted${base.slice(dot)}`
+    : `${base}.redacted`;
+}
 
 function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [review, setReview] = useState<Review>(emptyReview(0));
+  const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragging = useRef(false);
@@ -51,6 +73,7 @@ function App() {
   const loadPath = useCallback(async (path: string) => {
     try {
       setError(null);
+      setExportResult(null);
       const result = await invoke<ScanOutcome>("open_file", { path });
       setOutcome(result);
       setReview(emptyReview(result.findings.length));
@@ -64,9 +87,59 @@ function App() {
     if (typeof picked === "string") await loadPath(picked);
   }, [loadPath]);
 
+  const closeDocument = useCallback(async () => {
+    await invoke("close_document");
+    setOutcome(null);
+    setReview(emptyReview(0));
+    setExportResult(null);
+    setError(null);
+  }, []);
+
+  const doExport = useCallback(async () => {
+    if (!outcome) return;
+    const target = await saveDialog({
+      defaultPath: defaultExportName(outcome.path),
+    });
+    if (typeof target !== "string") return; // user cancelled
+    try {
+      setError(null);
+      const accepted = review.states
+        .map((s, i) => (s === "accepted" ? i : -1))
+        .filter((i) => i >= 0);
+      setExportResult(
+        await invoke<ExportOutcome>("export", {
+          outputPath: target,
+          accepted,
+        }),
+      );
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [outcome, review.states]);
+
+  // Native menu events from Rust: one channel, routed by id.
+  useEffect(() => {
+    const unlisten = listen<string>("menu", (event) => {
+      switch (event.payload) {
+        case "open":
+          void browse();
+          break;
+        case "close_document":
+          void closeDocument();
+          break;
+        case "toggle_theme":
+          toggleTheme();
+          break;
+      }
+    });
+    return () => {
+      void unlisten.then((f) => f());
+    };
+  }, [browse, closeDocument]);
+
   // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo.
   useEffect(() => {
-    if (!outcome) return;
+    if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement) return;
       const focused = review.focused;
@@ -109,7 +182,7 @@ function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [outcome, review.focused]);
+  }, [outcome, review.focused, exportResult]);
 
   // Native drag-and-drop: Tauri surfaces real file paths, which the
   // browser's own drop events cannot do inside a webview.
@@ -200,7 +273,13 @@ function App() {
           />
         </div>
       </div>
-      <VerdictStrip review={review} outcome={outcome} />
+      <VerdictStrip review={review} outcome={outcome} onExport={doExport} />
+      {exportResult && (
+        <ExportSuccess
+          result={exportResult}
+          onDismiss={() => setExportResult(null)}
+        />
+      )}
     </div>
   );
 }

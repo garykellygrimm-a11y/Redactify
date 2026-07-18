@@ -106,6 +106,4 @@ Design decisions worth noting:
 
 MIT — see [LICENSE](LICENSE).
 
-## Architecture
-
 Cargo workspace with a strict core/frontend split:

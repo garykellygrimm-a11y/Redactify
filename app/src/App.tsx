@@ -6,6 +6,15 @@ import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
 import { DocumentView } from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
+import {
+  Review,
+  decide,
+  decideRule,
+  emptyReview,
+  focusNext,
+  focusPrev,
+  undo,
+} from "./review";
 import "./App.css";
 
 export interface Finding {
@@ -34,16 +43,17 @@ const SIDEBAR_MAX = 480;
 function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
+  const [review, setReview] = useState<Review>(emptyReview(0));
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
-  const [focusedFinding, setFocusedFinding] = useState<number | null>(null);
   const dragging = useRef(false);
 
   const loadPath = useCallback(async (path: string) => {
     try {
       setError(null);
-      setFocusedFinding(null);
-      setOutcome(await invoke<ScanOutcome>("open_file", { path }));
+      const result = await invoke<ScanOutcome>("open_file", { path });
+      setOutcome(result);
+      setReview(emptyReview(result.findings.length));
     } catch (e) {
       setError(String(e));
     }
@@ -53,6 +63,53 @@ function App() {
     const picked = await openDialog({ multiple: false, directory: false });
     if (typeof picked === "string") await loadPath(picked);
   }, [loadPath]);
+
+  // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo.
+  useEffect(() => {
+    if (!outcome) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      const focused = review.focused;
+      switch (e.key) {
+        case "j":
+        case "ArrowDown":
+          setReview((r) => focusNext(r));
+          e.preventDefault();
+          break;
+        case "k":
+        case "ArrowUp":
+          setReview((r) => focusPrev(r));
+          e.preventDefault();
+          break;
+        case "a":
+          if (focused !== null)
+            setReview((r) => focusNext(decide(r, focused, "accepted")));
+          break;
+        case "r":
+          if (focused !== null)
+            setReview((r) => focusNext(decide(r, focused, "rejected")));
+          break;
+        case "A":
+        case "R": {
+          if (focused === null || !outcome) break;
+          const rule = outcome.findings[focused].rule_id;
+          const members = outcome.findings
+            .map((f, i) => ({ f, i }))
+            .filter(({ f }) => f.rule_id === rule)
+            .map(({ i }) => i);
+          setReview((r) =>
+            decideRule(r, members, e.key === "A" ? "accepted" : "rejected"),
+          );
+          break;
+        }
+        case "u":
+          setReview((r) => undo(r));
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [outcome, review.focused]);
 
   // Native drag-and-drop: Tauri surfaces real file paths, which the
   // browser's own drop events cannot do inside a webview.
@@ -94,6 +151,23 @@ function App() {
     };
   }, []);
 
+  const setFocus = useCallback(
+    (index: number) => setReview((r) => ({ ...r, focused: index })),
+    [],
+  );
+
+  const decideOne = useCallback(
+    (index: number, verdict: "accepted" | "rejected") =>
+      setReview((r) => decide(r, index, verdict)),
+    [],
+  );
+
+  const decideGroup = useCallback(
+    (indices: number[], verdict: "accepted" | "rejected") =>
+      setReview((r) => decideRule(r, indices, verdict)),
+    [],
+  );
+
   return (
     <div className="flex h-screen flex-col font-sans">
       <TopBar />
@@ -106,8 +180,10 @@ function App() {
         <div style={{ width: sidebarWidth }} className="shrink-0">
           <Sidebar
             outcome={outcome}
-            focusedFinding={focusedFinding}
-            onFocus={setFocusedFinding}
+            review={review}
+            onFocus={setFocus}
+            onDecide={decideOne}
+            onDecideGroup={decideGroup}
           />
         </div>
         <div
@@ -118,13 +194,13 @@ function App() {
         <div className="min-w-0 flex-1">
           <DocumentView
             outcome={outcome}
+            review={review}
             dragOver={dragOver}
-            focusedFinding={focusedFinding}
             onBrowse={browse}
           />
         </div>
       </div>
-      <VerdictStrip outcome={outcome} />
+      <VerdictStrip review={review} outcome={outcome} />
     </div>
   );
 }

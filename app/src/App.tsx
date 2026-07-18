@@ -1,49 +1,52 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+interface Finding {
+  start: number;
+  end: number;
+  rule_id: string;
+  matched: string;
+}
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
+function App() {
+  const [text, setText] = useState("");
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const [scanned, setScanned] = useState(false);
+
+  async function scan() {
+    const result = await invoke<Finding[]>("scan_text", { text });
+    setFindings(result);
+    setScanned(true);
   }
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+    <main style={{ maxWidth: 720, margin: "2rem auto", fontFamily: "system-ui" }}>
+      <h1>Redactify</h1>
+      <p>Paste text and scan it with the builtin rules — IPC plumbing proof.</p>
+      <textarea
+        rows={10}
+        style={{ width: "100%", fontFamily: "monospace" }}
+        value={text}
+        onChange={(e) => setText(e.currentTarget.value)}
+        placeholder="Paste log content here…"
+      />
+      <button onClick={scan} style={{ marginTop: "0.5rem" }}>
+        Scan
+      </button>
+      {scanned && (
+        <section>
+          <h2>{findings.length} finding(s)</h2>
+          <ul>
+            {findings.map((f, i) => (
+              <li key={i}>
+                <code>{f.rule_id}</code> at {f.start}–{f.end}:{" "}
+                <code>{f.matched}</code>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }

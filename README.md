@@ -69,3 +69,43 @@ Run the test suite with `cargo test`.
 ## Architecture
 
 Cargo workspace with a strict core/frontend split:
+```
+crates/
+├── redactify-core/   # detection engine, rules, redaction — pure library,
+│                     # no I/O opinions, no knowledge of its callers
+└── redactify-cli/    # thin frontend over the core
+```
+`redactify-core` exposes a small API — `detect(text, rules)` returns
+sorted, non-overlapping findings; `redact(text, findings)` rebuilds the
+text with findings replaced. Every future frontend (desktop app, additional
+tooling) calls the same engine, so detection behavior can never drift
+between interfaces.
+
+Design decisions worth noting:
+
+- **Findings carry byte offsets into immutable input.** `redact()` builds a
+  new string in a single forward pass rather than mutating in place, so
+  offsets can never be invalidated by earlier replacements.
+- **Liberal matching, by policy.** The SSN rule matches on shape and does
+  not validate SSA area-number rules. False positives are acceptable
+  because the product thesis is human review, not blind trust.
+- **Builtin patterns fail loudly.** Rule compilation panics on invalid
+  patterns — a broken builtin should explode in tests, not silently skip.
+
+## Roadmap
+
+- [x] **M0** — Workspace, CI (fmt / clippy / test), branch policy
+- [x] **M1** — Detection engine, builtin rules, overlap resolution, CLI
+- [x] **M2** — Audit manifest (JSON), `Result`-based errors, `clap` CLI
+- [ ] **M3** — User-defined rules (config file)
+- [ ] **M4** — Desktop app (Tauri): interactive review UI — accept/reject
+      findings before applying
+- [ ] **M5** — Installers and binary releases (Windows / macOS / Linux)
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Architecture
+
+Cargo workspace with a strict core/frontend split:

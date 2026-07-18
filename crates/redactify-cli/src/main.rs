@@ -1,37 +1,63 @@
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
 use std::process::ExitCode;
 
-// Dash in the crate name becomes an underscore in `use` — cargo quirk.
-use redactify_core::{builtin_rules, detect, redact};
+use clap::Parser;
+use redactify_core::{Manifest, builtin_rules, detect, redact};
+
+/// Scan a file for sensitive data and produce sanitized output.
+#[derive(Parser)]
+#[command(name = "redactify", version, about)]
+struct Cli {
+    /// File to scan
+    input: PathBuf,
+
+    /// Write redacted output to a file instead of stdout
+    #[arg(short, long)]
+    output: Option<PathBuf>,
+
+    /// Write a JSON audit manifest to this path
+    #[arg(long)]
+    manifest: Option<PathBuf>,
+}
 
 fn main() -> ExitCode {
-    // args().nth(0) is the program name itself; nth(1) is the first real arg.
-    let Some(path) = std::env::args().nth(1) else {
-        eprintln!("usage: redactify <file>");
-        return ExitCode::FAILURE;
-    };
-
-    let text = match std::fs::read_to_string(&path) {
-        Ok(contents) => contents,
+    match run(Cli::parse()) {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: could not read '{path}': {e}");
-            return ExitCode::FAILURE;
+            eprintln!("error: {e}");
+            ExitCode::FAILURE
         }
-    };
+    }
+}
+
+fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+    let text = fs::read_to_string(&cli.input)
+        .map_err(|e| format!("could not read '{}': {e}", cli.input.display()))?;
 
     let rules = builtin_rules();
     let findings = detect(&text, &rules);
+    let redacted = redact(&text, &findings);
 
-    // Redacted content -> stdout, so `redactify app.log > clean.log` works.
-    print!("{}", redact(&text, &findings));
+    // Redacted content: file if -o given, otherwise stdout (pipe-friendly).
+    match &cli.output {
+        Some(path) => fs::write(path, &redacted)
+            .map_err(|e| format!("could not write '{}': {e}", path.display()))?,
+        None => print!("{redacted}"),
+    }
 
-    // Summary -> stderr, so it's visible in the terminal but never
-    // contaminates redirected output.
+    if let Some(path) = &cli.manifest {
+        let tool = format!("redactify {}", env!("CARGO_PKG_VERSION"));
+        let manifest = Manifest::new(&tool, &text, &redacted, &rules, &findings);
+        fs::write(path, manifest.to_json()?)
+            .map_err(|e| format!("could not write manifest '{}': {e}", path.display()))?;
+    }
+
+    // Summary -> stderr, same contract as before.
     if findings.is_empty() {
         eprintln!("0 findings");
     } else {
-        // BTreeMap instead of HashMap for deterministic (alphabetical)
-        // ordering — stable output is testable output.
         let mut counts: BTreeMap<&str, usize> = BTreeMap::new();
         for f in &findings {
             *counts.entry(f.rule_id.as_str()).or_insert(0) += 1;
@@ -43,5 +69,5 @@ fn main() -> ExitCode {
         eprintln!("{} findings: {}", findings.len(), breakdown.join(", "));
     }
 
-    ExitCode::SUCCESS
+    Ok(())
 }

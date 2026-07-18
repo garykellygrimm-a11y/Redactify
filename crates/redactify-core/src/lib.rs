@@ -1,8 +1,11 @@
+mod error;
 mod finding;
+mod manifest;
 mod rules;
 
-// Re-export so callers write `redactify_core::Rule`, not `redactify_core::rules::Rule`.
+pub use error::RedactifyError;
 pub use finding::Finding;
+pub use manifest::{Manifest, ManifestFinding, sha256_hex};
 pub use rules::{Rule, builtin_rules};
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,

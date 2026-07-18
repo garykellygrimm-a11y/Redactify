@@ -5,8 +5,8 @@ mod rules;
 
 pub use error::RedactifyError;
 pub use finding::Finding;
-pub use manifest::{sha256_hex, Manifest, ManifestFinding};
-pub use rules::{builtin_rules, Rule};
+pub use manifest::{Manifest, ManifestFinding, sha256_hex};
+pub use rules::{Rule, builtin_rules};
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,
 /// with overlaps resolved (earliest start wins; on a tie, longest match wins).

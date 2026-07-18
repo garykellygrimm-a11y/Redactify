@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use redactify_core::{builtin_rules, detect, redact, Manifest};
+use redactify_core::{Manifest, builtin_rules, detect, redact};
 
 /// Scan a file for sensitive data and produce sanitized output.
 #[derive(Parser)]

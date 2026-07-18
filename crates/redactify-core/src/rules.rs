@@ -15,6 +15,7 @@ use crate::error::RedactifyError;
 const USER_PATTERN_SIZE_LIMIT: usize = 1 << 20; // 1 MiB
 
 /// A detection rule: a named, compiled pattern.
+#[derive(Debug)]
 pub struct Rule {
     /// Stable machine id used in findings and redaction tokens, e.g. "ipv4".
     pub id: String,

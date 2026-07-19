@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "app",
+  "productName": "Redactify",
   "version": "0.4.0",
   "identifier": "com.garykellygrimm.redactify",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "app",
-        "width": 800,
-        "height": 600
+        "title": "Redactify",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 560
       }
     ],
     "security": {

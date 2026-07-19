@@ -281,6 +281,13 @@ pub fn run() {
                 ],
             )?;
 
+            let preview = MenuItem::with_id(
+                app,
+                "toggle_preview",
+                "Before / After Preview",
+                true,
+                Some("CmdOrCtrl+D"),
+            )?;
             let theme = MenuItem::with_id(
                 app,
                 "toggle_theme",
@@ -288,7 +295,7 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+T"),
             )?;
-            let view = Submenu::with_items(app, "View", true, &[&theme])?;
+            let view = Submenu::with_items(app, "View", true, &[&preview, &theme])?;
 
             let menu = Menu::with_items(app, &[&file, &view])?;
             app.set_menu(menu)?;

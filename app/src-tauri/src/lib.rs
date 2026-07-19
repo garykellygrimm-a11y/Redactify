@@ -3,8 +3,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
-    builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition,
-    Finding, Manifest, Rule,
+    builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition, Finding,
+    Manifest, Rule,
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -135,14 +135,21 @@ fn scan(path: String, text: String, rules: &[Rule]) -> (ScanOutcome, OpenDocumen
         findings: findings.clone(),
         path: path.clone(),
     };
-    (outcome, OpenDocument { path, text, findings })
+    (
+        outcome,
+        OpenDocument {
+            path,
+            text,
+            findings,
+        },
+    )
 }
 
 /// Read and scan a file with the active rule set.
 #[tauri::command]
 fn open_file(path: String, state: State<AppState>) -> Result<ScanOutcome, String> {
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| format!("Could not read '{path}': {e}"))?;
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("Could not read '{path}': {e}"))?;
     let rules = state.rules.lock().unwrap();
     let (outcome, doc) = scan(path, text, &rules);
     *state.document.lock().unwrap() = Some(doc);
@@ -211,7 +218,14 @@ fn export(
     let redacted = redact(&doc.text, &applied);
 
     let tool = format!("redactify {}", env!("CARGO_PKG_VERSION"));
-    let manifest = Manifest::new(&tool, &doc.text, &redacted, &rules, &doc.findings, &dispositions);
+    let manifest = Manifest::new(
+        &tool,
+        &doc.text,
+        &redacted,
+        &rules,
+        &doc.findings,
+        &dispositions,
+    );
 
     let manifest_path = format!("{output_path}.manifest.json");
     std::fs::write(&output_path, &redacted)
@@ -275,8 +289,13 @@ pub fn run() {
                 true,
                 Some("CmdOrCtrl+D"),
             )?;
-            let theme =
-                MenuItem::with_id(app, "toggle_theme", "Toggle Theme", true, Some("CmdOrCtrl+T"))?;
+            let theme = MenuItem::with_id(
+                app,
+                "toggle_theme",
+                "Toggle Theme",
+                true,
+                Some("CmdOrCtrl+T"),
+            )?;
             let view = Submenu::with_items(app, "View", true, &[&preview, &theme])?;
 
             let menu = Menu::with_items(app, &[&file, &view])?;

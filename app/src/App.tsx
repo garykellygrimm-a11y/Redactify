@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -8,6 +8,7 @@ import { Sidebar } from "./components/Sidebar";
 import { DocumentView } from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
 import { ExportSuccess } from "./components/ExportSuccess";
+import { SearchBar } from "./components/SearchBar";
 import { toggleTheme } from "./theme";
 import {
   Review,
@@ -80,7 +81,41 @@ function App() {
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [currentMatch, setCurrentMatch] = useState(-1);
   const dragging = useRef(false);
+
+  // Line indices containing the query, case-insensitive.
+  const matches = useMemo(() => {
+    if (!outcome || !searchOpen || query.trim() === "") return [];
+    const q = query.toLowerCase();
+    const hits: number[] = [];
+    outcome.lines.forEach((segments, i) => {
+      const line = segments.map((s) => s.text).join("");
+      if (line.toLowerCase().includes(q)) hits.push(i);
+    });
+    return hits;
+  }, [outcome, searchOpen, query]);
+
+  useEffect(() => {
+    setCurrentMatch(matches.length > 0 ? 0 : -1);
+  }, [matches]);
+
+  const nextMatch = useCallback(() => {
+    if (matches.length > 0)
+      setCurrentMatch((c) => (c + 1) % matches.length);
+  }, [matches.length]);
+
+  const prevMatch = useCallback(() => {
+    if (matches.length > 0)
+      setCurrentMatch((c) => (c - 1 + matches.length) % matches.length);
+  }, [matches.length]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setQuery("");
+  }, []);
 
   const loadPath = useCallback(async (path: string) => {
     try {
@@ -126,7 +161,8 @@ function App() {
     setReview(emptyReview(0));
     setExportResult(null);
     setError(null);
-  }, []);
+    closeSearch();
+  }, [closeSearch]);
 
   const doExport = useCallback(async () => {
     if (!outcome) return;
@@ -173,11 +209,21 @@ function App() {
     };
   }, [browse, loadRules, closeDocument]);
 
-  // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo.
+  // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo,
+  // Ctrl+F search. Review keys stay quiet while typing in inputs.
   useEffect(() => {
     if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        setSearchOpen(true);
+        e.preventDefault();
+        return;
+      }
       if (e.target instanceof HTMLInputElement) return;
+      if (e.key === "Escape") {
+        closeSearch();
+        return;
+      }
       const focused = review.focused;
       switch (e.key) {
         case "j":
@@ -218,7 +264,7 @@ function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [outcome, review.focused, exportResult]);
+  }, [outcome, review.focused, exportResult, closeSearch]);
 
   // Native drag-and-drop: Tauri surfaces real file paths, which the
   // browser's own drop events cannot do inside a webview.
@@ -285,6 +331,17 @@ function App() {
           {error}
         </div>
       )}
+      {searchOpen && outcome && (
+        <SearchBar
+          query={query}
+          matchCount={matches.length}
+          currentMatch={currentMatch}
+          onQuery={setQuery}
+          onNext={nextMatch}
+          onPrev={prevMatch}
+          onClose={closeSearch}
+        />
+      )}
       <div className="flex min-h-0 flex-1">
         <div style={{ width: sidebarWidth }} className="shrink-0">
           <Sidebar
@@ -305,6 +362,7 @@ function App() {
             outcome={outcome}
             review={review}
             dragOver={dragOver}
+            searchLine={currentMatch >= 0 ? matches[currentMatch] : null}
             onBrowse={browse}
           />
         </div>

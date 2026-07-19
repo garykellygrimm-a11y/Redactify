@@ -6,6 +6,7 @@ interface Props {
   outcome: ScanOutcome | null;
   review: Review;
   dragOver: boolean;
+  searchLine: number | null;
   onBrowse: () => void;
 }
 
@@ -14,8 +15,15 @@ export function ruleHue(ruleId: string, ruleIds: string[]): number {
   return (ruleIds.indexOf(ruleId) % 5) + 1;
 }
 
-export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
+export function DocumentView({
+  outcome,
+  review,
+  dragOver,
+  searchLine,
+  onBrowse,
+}: Props) {
   const focusedRef = useRef<HTMLElement | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
 
   const ruleIds = useMemo(
     () =>
@@ -28,6 +36,10 @@ export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
   useEffect(() => {
     focusedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [review.focused]);
+
+  useEffect(() => {
+    searchRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [searchLine]);
 
   if (!outcome) {
     return (
@@ -60,7 +72,11 @@ export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
     <section className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6">
       <div className="min-w-max px-0 py-2">
         {outcome.lines.map((segments, i) => (
-          <div key={i} className="flex">
+          <div
+            key={i}
+            ref={i === searchLine ? searchRef : null}
+            className={`flex ${i === searchLine ? "bg-accent-soft" : ""}`}
+          >
             <span className="w-12 shrink-0 select-none pr-3 text-right text-muted/60">
               {i + 1}
             </span>
@@ -76,7 +92,6 @@ export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
                   ? { outline: "2px solid var(--accent)", outlineOffset: "1px" }
                   : {};
 
-                // ACCEPTED: the live preview — text collapses to its token.
                 if (state === "accepted") {
                   return (
                     <mark
@@ -91,7 +106,6 @@ export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
                   );
                 }
 
-                // REJECTED: plain text, dotted underline keeps it findable.
                 if (state === "rejected") {
                   return (
                     <span
@@ -106,7 +120,6 @@ export function DocumentView({ outcome, review, dragOver, onBrowse }: Props) {
                   );
                 }
 
-                // PENDING: amber, awaiting judgment.
                 return (
                   <mark
                     key={j}

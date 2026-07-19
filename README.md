@@ -98,7 +98,7 @@ Design decisions worth noting:
 - [x] **M1** — Detection engine, builtin rules, overlap resolution, CLI
 - [x] **M2** — Audit manifest (JSON), `Result`-based errors, `clap` CLI
 - [x] **M3** — User-defined rules (config file)
-- [ ] **M4** — Desktop app (Tauri): interactive review UI — accept/reject
+- [x] **M4** — Desktop app (Tauri): interactive review UI — accept/reject
       findings before applying
 - [ ] **M5** — Installers and binary releases (Windows / macOS / Linux)
 

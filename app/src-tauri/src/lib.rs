@@ -1,7 +1,11 @@
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
 
-use redactify_core::{builtin_rules, detect, redact, sha256_hex, Disposition, Finding, Manifest};
+use redactify_core::{
+    builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition, Finding,
+    Manifest, Rule,
+};
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, State};
@@ -29,12 +33,26 @@ struct ScanOutcome {
 
 /// The open document, held on the Rust side between open and export.
 struct OpenDocument {
+    path: String,
     text: String,
     findings: Vec<Finding>,
 }
 
-#[derive(Default)]
-struct AppState(Mutex<Option<OpenDocument>>);
+/// Session state: the active rule set (builtins until a rules file is
+/// loaded) and the open document, if any.
+struct AppState {
+    rules: Mutex<Vec<Rule>>,
+    document: Mutex<Option<OpenDocument>>,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        AppState {
+            rules: Mutex::new(builtin_rules()),
+            document: Mutex::new(None),
+        }
+    }
+}
 
 /// What the success screen shows.
 #[derive(Serialize)]
@@ -45,6 +63,15 @@ struct ExportOutcome {
     output_sha256: String,
     applied_count: usize,
     rejected_count: usize,
+}
+
+/// Result of loading a rules file: what's now active, and — if a document
+/// was open — the re-scanned outcome (the review session starts over).
+#[derive(Serialize)]
+struct RulesOutcome {
+    rules_path: String,
+    rule_count: usize,
+    rescanned: Option<ScanOutcome>,
 }
 
 /// Split `text` into lines of alternating plain/finding segments.
@@ -96,30 +123,71 @@ fn segment(text: &str, findings: &[Finding]) -> Vec<Vec<Segment>> {
     lines
 }
 
-/// Read and scan a file. All I/O, detection, and offset math stay in Rust.
-#[tauri::command]
-fn open_file(path: String, state: State<AppState>) -> Result<ScanOutcome, String> {
+/// Scan `text` with `rules` and build the outcome + document record.
+fn scan(path: String, text: String, rules: &[Rule]) -> (ScanOutcome, OpenDocument) {
     let start = Instant::now();
-    let text =
-        std::fs::read_to_string(&path).map_err(|e| format!("Could not read '{path}': {e}"))?;
-    let findings = detect(&text, &builtin_rules());
+    let findings = detect(&text, rules);
     let lines = segment(&text, &findings);
-
     let outcome = ScanOutcome {
         line_count: lines.len(),
         elapsed_ms: start.elapsed().as_millis(),
         lines,
         findings: findings.clone(),
-        path,
+        path: path.clone(),
     };
-    *state.0.lock().unwrap() = Some(OpenDocument { text, findings });
+    (
+        outcome,
+        OpenDocument {
+            path,
+            text,
+            findings,
+        },
+    )
+}
+
+/// Read and scan a file with the active rule set.
+#[tauri::command]
+fn open_file(path: String, state: State<AppState>) -> Result<ScanOutcome, String> {
+    let text =
+        std::fs::read_to_string(&path).map_err(|e| format!("Could not read '{path}': {e}"))?;
+    let rules = state.rules.lock().unwrap();
+    let (outcome, doc) = scan(path, text, &rules);
+    *state.document.lock().unwrap() = Some(doc);
     Ok(outcome)
 }
 
+/// Load a TOML rules file: fail-fast validation, merge over builtins,
+/// become the session's active rule set. If a document is open, re-scan
+/// it now — new rules silently NOT applying to the visible document
+/// would be a false sense of coverage.
+#[tauri::command]
+fn load_rules(path: String, state: State<AppState>) -> Result<RulesOutcome, String> {
+    let user = load_rules_file(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    let merged = merge_rules(builtin_rules(), user);
+    let rule_count = merged.len();
+
+    let mut rules = state.rules.lock().unwrap();
+    *rules = merged;
+
+    let mut doc_guard = state.document.lock().unwrap();
+    let rescanned = doc_guard.take().map(|doc| {
+        let (outcome, new_doc) = scan(doc.path, doc.text, &rules);
+        *doc_guard = Some(new_doc);
+        outcome
+    });
+
+    Ok(RulesOutcome {
+        rules_path: path,
+        rule_count,
+        rescanned,
+    })
+}
+
 /// Drop the held document — the "start over" verb behind File > Close.
+/// The active rule set survives; it is session state, not document state.
 #[tauri::command]
 fn close_document(state: State<AppState>) {
-    *state.0.lock().unwrap() = None;
+    *state.document.lock().unwrap() = None;
 }
 
 /// Apply the reviewer's verdicts: write the redacted file and manifest.
@@ -129,8 +197,9 @@ fn export(
     accepted: Vec<usize>,
     state: State<AppState>,
 ) -> Result<ExportOutcome, String> {
-    let guard = state.0.lock().unwrap();
+    let guard = state.document.lock().unwrap();
     let doc = guard.as_ref().ok_or("No document is open")?;
+    let rules = state.rules.lock().unwrap();
 
     let mut dispositions = vec![Disposition::Rejected; doc.findings.len()];
     for &i in &accepted {
@@ -153,7 +222,7 @@ fn export(
         &tool,
         &doc.text,
         &redacted,
-        &builtin_rules(),
+        &rules,
         &doc.findings,
         &dispositions,
     );
@@ -182,11 +251,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
-        .invoke_handler(tauri::generate_handler![open_file, close_document, export])
+        .invoke_handler(tauri::generate_handler![
+            open_file,
+            load_rules,
+            close_document,
+            export
+        ])
         .setup(|app| {
-            // Native menu bar. Items the frontend must react to emit
-            // events; Exit is handled natively by the predefined item.
             let open = MenuItem::with_id(app, "open", "Open…", true, Some("CmdOrCtrl+O"))?;
+            let rules =
+                MenuItem::with_id(app, "load_rules", "Load Rules…", true, Some("CmdOrCtrl+L"))?;
             let close_doc = MenuItem::with_id(
                 app,
                 "close_document",
@@ -200,6 +274,7 @@ pub fn run() {
                 true,
                 &[
                     &open,
+                    &rules,
                     &close_doc,
                     &PredefinedMenuItem::separator(app)?,
                     &PredefinedMenuItem::quit(app, Some("Exit"))?,
@@ -219,7 +294,6 @@ pub fn run() {
             app.set_menu(menu)?;
 
             app.on_menu_event(|app, event| {
-                // Forward UI-relevant items to the frontend as one event.
                 let _ = app.emit("menu", event.id().0.clone());
             });
 

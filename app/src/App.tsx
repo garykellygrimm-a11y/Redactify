@@ -49,6 +49,17 @@ export interface ExportOutcome {
   rejected_count: number;
 }
 
+export interface RulesOutcome {
+  rules_path: string;
+  rule_count: number;
+  rescanned: ScanOutcome | null;
+}
+
+export interface RulesInfo {
+  path: string;
+  count: number;
+}
+
 const SIDEBAR_MIN = 220;
 const SIDEBAR_MAX = 480;
 
@@ -65,6 +76,7 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(300);
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [review, setReview] = useState<Review>(emptyReview(0));
+  const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -86,6 +98,27 @@ function App() {
     const picked = await openDialog({ multiple: false, directory: false });
     if (typeof picked === "string") await loadPath(picked);
   }, [loadPath]);
+
+  const loadRules = useCallback(async () => {
+    const picked = await openDialog({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "Rules (TOML)", extensions: ["toml"] }],
+    });
+    if (typeof picked !== "string") return;
+    try {
+      setError(null);
+      const result = await invoke<RulesOutcome>("load_rules", { path: picked });
+      setRulesInfo({ path: result.rules_path, count: result.rule_count });
+      if (result.rescanned) {
+        setOutcome(result.rescanned);
+        setReview(emptyReview(result.rescanned.findings.length));
+        setExportResult(null);
+      }
+    } catch (e) {
+      setError(String(e));
+    }
+  }, []);
 
   const closeDocument = useCallback(async () => {
     await invoke("close_document");
@@ -124,6 +157,9 @@ function App() {
         case "open":
           void browse();
           break;
+        case "load_rules":
+          void loadRules();
+          break;
         case "close_document":
           void closeDocument();
           break;
@@ -135,7 +171,7 @@ function App() {
     return () => {
       void unlisten.then((f) => f());
     };
-  }, [browse, closeDocument]);
+  }, [browse, loadRules, closeDocument]);
 
   // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo.
   useEffect(() => {
@@ -243,7 +279,7 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col font-sans">
-      <TopBar />
+      <TopBar rulesInfo={rulesInfo} />
       {error && (
         <div className="border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending">
           {error}

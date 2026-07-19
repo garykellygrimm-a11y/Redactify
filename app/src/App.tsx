@@ -5,7 +5,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
-import { DocumentView } from "./components/DocumentView";
+import { DocumentView, type ViewMode } from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
 import { ExportSuccess } from "./components/ExportSuccess";
 import { SearchBar } from "./components/SearchBar";
@@ -79,6 +79,7 @@ function App() {
   const [review, setReview] = useState<Review>(emptyReview(0));
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("before");
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -103,8 +104,7 @@ function App() {
   }, [matches]);
 
   const nextMatch = useCallback(() => {
-    if (matches.length > 0)
-      setCurrentMatch((c) => (c + 1) % matches.length);
+    if (matches.length > 0) setCurrentMatch((c) => (c + 1) % matches.length);
   }, [matches.length]);
 
   const prevMatch = useCallback(() => {
@@ -121,6 +121,7 @@ function App() {
     try {
       setError(null);
       setExportResult(null);
+      setViewMode("before");
       const result = await invoke<ScanOutcome>("open_file", { path });
       setOutcome(result);
       setReview(emptyReview(result.findings.length));
@@ -149,6 +150,7 @@ function App() {
         setOutcome(result.rescanned);
         setReview(emptyReview(result.rescanned.findings.length));
         setExportResult(null);
+        setViewMode("before");
       }
     } catch (e) {
       setError(String(e));
@@ -161,6 +163,7 @@ function App() {
     setReview(emptyReview(0));
     setExportResult(null);
     setError(null);
+    setViewMode("before");
     closeSearch();
   }, [closeSearch]);
 
@@ -199,6 +202,9 @@ function App() {
         case "close_document":
           void closeDocument();
           break;
+        case "toggle_preview":
+          setViewMode((m) => (m === "before" ? "after" : "before"));
+          break;
         case "toggle_theme":
           toggleTheme();
           break;
@@ -210,12 +216,17 @@ function App() {
   }, [browse, loadRules, closeDocument]);
 
   // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo,
-  // Ctrl+F search. Review keys stay quiet while typing in inputs.
+  // Ctrl+F search, Ctrl+D preview. Review keys stay quiet in inputs.
   useEffect(() => {
     if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
         setSearchOpen(true);
+        e.preventDefault();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        setViewMode((m) => (m === "before" ? "after" : "before"));
         e.preventDefault();
         return;
       }
@@ -361,6 +372,7 @@ function App() {
           <DocumentView
             outcome={outcome}
             review={review}
+            mode={viewMode}
             dragOver={dragOver}
             searchLine={currentMatch >= 0 ? matches[currentMatch] : null}
             onBrowse={browse}

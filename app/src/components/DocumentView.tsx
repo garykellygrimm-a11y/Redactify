@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef } from "react";
 import type { ScanOutcome } from "../App";
 import type { Review } from "../review";
 
+export type ViewMode = "before" | "after";
+
 interface Props {
   outcome: ScanOutcome | null;
   review: Review;
+  mode: ViewMode;
   dragOver: boolean;
   searchLine: number | null;
   onBrowse: () => void;
@@ -18,6 +21,7 @@ export function ruleHue(ruleId: string, ruleIds: string[]): number {
 export function DocumentView({
   outcome,
   review,
+  mode,
   dragOver,
   searchLine,
   onBrowse,
@@ -63,6 +67,47 @@ export function DocumentView({
           >
             Browse…
           </button>
+        </div>
+      </section>
+    );
+  }
+
+  // AFTER: read-only preview of the export as it stands. Accepted ->
+  // token; rejected and pending -> original text, unmarked. This is
+  // literally what redact() will produce for the current decisions.
+  if (mode === "after") {
+    return (
+      <section className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6">
+        <div className="sticky top-0 z-[1] border-b border-border bg-surface-raised px-4 py-1 text-xs text-muted">
+          Preview: output as it would export now · pending findings are NOT
+          redacted until accepted
+        </div>
+        <div className="min-w-max px-0 py-2">
+          {outcome.lines.map((segments, i) => (
+            <div
+              key={i}
+              ref={i === searchLine ? searchRef : null}
+              className={`flex ${i === searchLine ? "bg-accent-soft" : ""}`}
+            >
+              <span className="w-12 shrink-0 select-none pr-3 text-right text-muted/60">
+                {i + 1}
+              </span>
+              <span className="whitespace-pre">
+                {segments.map((seg, j) => {
+                  const isAccepted =
+                    seg.finding !== null &&
+                    review.states[seg.finding] === "accepted";
+                  return isAccepted ? (
+                    <span key={j} className="text-muted">
+                      [REDACTED:{outcome.findings[seg.finding!].rule_id}]
+                    </span>
+                  ) : (
+                    <span key={j}>{seg.text}</span>
+                  );
+                })}
+              </span>
+            </div>
+          ))}
         </div>
       </section>
     );

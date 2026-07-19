@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  confirm,
+  open as openDialog,
+  save as saveDialog,
+} from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
 import { DocumentView, type ViewMode } from "./components/DocumentView";
@@ -17,6 +22,7 @@ import {
   emptyReview,
   focusNext,
   focusPrev,
+  tally,
   undo,
 } from "./review";
 import "./App.css";
@@ -87,6 +93,31 @@ function App() {
   const [currentMatch, setCurrentMatch] = useState(-1);
   const dragging = useRef(false);
 
+  // Shadow of `review` for callbacks that must read the CURRENT state
+  // without depending on it (dependency churn would re-subscribe the
+  // menu listener on every decision).
+  const reviewRef = useRef(review);
+  useEffect(() => {
+    reviewRef.current = review;
+  }, [review]);
+
+  /** True if it's safe to discard the session; asks the user when not. */
+  const confirmDiscard = useCallback(async (): Promise<boolean> => {
+    const r = reviewRef.current;
+    if (r.states.length === 0) return true;
+    const { pending } = tally(r);
+    const decided = r.log.length > 0;
+    if (pending === 0 && !decided) return true; // nothing at stake
+    const what =
+      pending > 0
+        ? `${pending} finding${pending === 1 ? "" : "s"} still undecided`
+        : "your review decisions";
+    return confirm(`Discard ${what}? This cannot be undone.`, {
+      title: "Redactify",
+      kind: "warning",
+    });
+  }, []);
+
   // Line indices containing the query, case-insensitive.
   const matches = useMemo(() => {
     if (!outcome || !searchOpen || query.trim() === "") return [];
@@ -117,18 +148,24 @@ function App() {
     setQuery("");
   }, []);
 
-  const loadPath = useCallback(async (path: string) => {
-    try {
-      setError(null);
-      setExportResult(null);
-      setViewMode("before");
-      const result = await invoke<ScanOutcome>("open_file", { path });
-      setOutcome(result);
-      setReview(emptyReview(result.findings.length));
-    } catch (e) {
-      setError(String(e));
-    }
-  }, []);
+  const loadPath = useCallback(
+    async (path: string) => {
+      if (!(await confirmDiscard())) return;
+      try {
+        setError(null);
+        setExportResult(null);
+        setViewMode("before");
+        const result = await invoke<ScanOutcome>("open_file", { path });
+        setOutcome(result);
+        setReview(emptyReview(result.findings.length));
+        const name = path.replace(/^.*[\\/]/, "");
+        void getCurrentWindow().setTitle(`${name} — Redactify`);
+      } catch (e) {
+        setError(String(e));
+      }
+    },
+    [confirmDiscard],
+  );
 
   const browse = useCallback(async () => {
     const picked = await openDialog({ multiple: false, directory: false });
@@ -142,6 +179,8 @@ function App() {
       filters: [{ name: "Rules (TOML)", extensions: ["toml"] }],
     });
     if (typeof picked !== "string") return;
+    // A load with a document open re-scans and resets the review.
+    if (outcome && !(await confirmDiscard())) return;
     try {
       setError(null);
       const result = await invoke<RulesOutcome>("load_rules", { path: picked });
@@ -155,9 +194,10 @@ function App() {
     } catch (e) {
       setError(String(e));
     }
-  }, []);
+  }, [outcome, confirmDiscard]);
 
   const closeDocument = useCallback(async () => {
+    if (!(await confirmDiscard())) return;
     await invoke("close_document");
     setOutcome(null);
     setReview(emptyReview(0));
@@ -165,7 +205,8 @@ function App() {
     setError(null);
     setViewMode("before");
     closeSearch();
-  }, [closeSearch]);
+    void getCurrentWindow().setTitle("Redactify");
+  }, [closeSearch, confirmDiscard]);
 
   const doExport = useCallback(async () => {
     if (!outcome) return;

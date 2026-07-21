@@ -1,0 +1,21 @@
+[workspace]
+# We publish binaries via GitHub Releases, not crates to crates.io.
+publish = false
+git_release_enable = false
+
+# release-plz maintains the release PR (version bumps + changelog);
+# tagging stays a manual, deliberate act after the PR merges — the
+# tag is what fires the installer/CLI build workflow.
+git_tag_enable = false
+
+[[package]]
+name = "redactify-core"
+changelog_update = true
+
+[[package]]
+name = "redactify-cli"
+changelog_update = true
+
+[[package]]
+name = "app"
+changelog_update = true

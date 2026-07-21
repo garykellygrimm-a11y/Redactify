@@ -152,13 +152,13 @@ Design decisions worth noting:
 
 ## Roadmap
 
-- [x] **M0** — Workspace, CI (fmt / clippy / test), branch policy
-- [x] **M1** — Detection engine, builtin rules, overlap resolution, CLI
-- [x] **M2** — Audit manifest (JSON), `Result`-based errors, `clap` CLI
-- [x] **M3** — User-defined rules (TOML, fail-fast validation)
-- [x] **M4** — Desktop app: review UI, export, custom rules, themes
-- [ ] **M5** — Installers, binary releases, release automation
-- [ ] **v0.5** — Virtualized document rendering (the remaining
+- ✅ **M0** — Workspace, CI (fmt / clippy / test), branch policy
+- ✅ **M1** — Detection engine, builtin rules, overlap resolution, CLI
+- ✅ **M2** — Audit manifest (JSON), `Result`-based errors, `clap` CLI
+- ✅ **M3** — User-defined rules (TOML, fail-fast validation)
+- ✅ **M4** — Desktop app: review UI, export, custom rules, themes
+- ⬜ **M5** — Installers, binary releases, release automation
+- ⬜ **v0.5** — Virtualized document rendering (the remaining
       large-file work; memoization and imperative match-stepping
       already keep 30k-line review responsive), recent files,
       preview-mode refinement

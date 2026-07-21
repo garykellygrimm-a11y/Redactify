@@ -90,6 +90,7 @@ function App() {
   const [dragOver, setDragOver] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [currentMatch, setCurrentMatch] = useState(-1);
   const dragging = useRef(false);
 
@@ -118,21 +119,44 @@ function App() {
     });
   }, []);
 
+  // Search matching walks every line, so it runs against a DEBOUNCED
+  // copy of the query — typing stays instant on large files; the scan
+  // fires once per pause instead of once per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 200);
+    return () => clearTimeout(t);
+  }, [query]);
+
   // Line indices containing the query, case-insensitive.
   const matches = useMemo(() => {
-    if (!outcome || !searchOpen || query.trim() === "") return [];
-    const q = query.toLowerCase();
+    if (!outcome || !searchOpen || debouncedQuery.trim() === "") return [];
+    const q = debouncedQuery.toLowerCase();
     const hits: number[] = [];
     outcome.lines.forEach((segments, i) => {
       const line = segments.map((s) => s.text).join("");
       if (line.toLowerCase().includes(q)) hits.push(i);
     });
     return hits;
-  }, [outcome, searchOpen, query]);
+  }, [outcome, searchOpen, debouncedQuery]);
 
   useEffect(() => {
     setCurrentMatch(matches.length > 0 ? 0 : -1);
   }, [matches]);
+
+  // Current-match highlight is applied imperatively: stepping matches
+  // must not re-render 30k document rows just to move one row's tint.
+  const prevSearchEl = useRef<Element | null>(null);
+  useEffect(() => {
+    prevSearchEl.current?.classList.remove("search-current");
+    prevSearchEl.current = null;
+    if (currentMatch < 0) return;
+    const el = document.querySelector(`[data-line="${matches[currentMatch]}"]`);
+    if (el) {
+      el.classList.add("search-current");
+      el.scrollIntoView({ block: "center", behavior: "auto" });
+      prevSearchEl.current = el;
+    }
+  }, [currentMatch, matches]);
 
   const nextMatch = useCallback(() => {
     if (matches.length > 0) setCurrentMatch((c) => (c + 1) % matches.length);
@@ -415,7 +439,7 @@ function App() {
             review={review}
             mode={viewMode}
             dragOver={dragOver}
-            searchLine={currentMatch >= 0 ? matches[currentMatch] : null}
+            searchQuery={debouncedQuery}
             onBrowse={browse}
           />
         </div>

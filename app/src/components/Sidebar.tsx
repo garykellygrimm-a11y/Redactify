@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ScanOutcome } from "../App";
 import type { Review, Verdict } from "../review";
 import { ruleHue } from "./DocumentView";
@@ -13,7 +13,9 @@ interface Props {
 
 const STATE_GLYPH = { pending: "·", accepted: "✓", rejected: "✕" } as const;
 
-export function Sidebar({
+// memo: App re-renders on every search keystroke; without this the
+// sidebar rebuilds its 30k-finding group structure per letter.
+export const Sidebar = memo(function Sidebar({
   outcome,
   review,
   onFocus,
@@ -157,4 +159,4 @@ export function Sidebar({
       </div>
     </aside>
   );
-}
+});

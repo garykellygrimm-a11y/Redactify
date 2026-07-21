@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ScanOutcome } from "../App";
 import type { Review } from "../review";
 import { tally } from "../review";
@@ -8,7 +9,13 @@ interface Props {
   onExport: () => void;
 }
 
-export function VerdictStrip({ review, outcome, onExport }: Props) {
+// memo: keeps the per-keystroke App re-render from re-tallying 30k
+// review states; the strip recomputes only when decisions change.
+export const VerdictStrip = memo(function VerdictStrip({
+  review,
+  outcome,
+  onExport,
+}: Props) {
   if (!outcome) {
     return (
       <footer className="flex h-11 shrink-0 items-center gap-4 border-t border-border bg-surface-raised px-4 text-sm">
@@ -47,4 +54,4 @@ export function VerdictStrip({ review, outcome, onExport }: Props) {
       </button>
     </footer>
   );
-}
+});

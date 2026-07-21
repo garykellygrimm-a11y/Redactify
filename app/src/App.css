@@ -92,3 +92,9 @@ body {
   color: var(--text);
   font-family: "Inter Variable", system-ui, sans-serif;
 }
+
+/* Current search match row — applied imperatively (see App.tsx) so
+   stepping between matches never re-renders the document tree. */
+.search-current {
+  background: var(--accent-soft);
+}

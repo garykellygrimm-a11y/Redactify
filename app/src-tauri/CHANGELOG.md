@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/garykellygrimm-a11y/Redactify/compare/app-v0.4.1...app-v0.4.2) - 2026-07-21
+
+### Other
+
+- update Cargo.toml dependencies
+
 ## [0.4.1](https://github.com/garykellygrimm-a11y/Redactify/compare/app-v0.4.0...app-v0.4.1) - 2026-07-21
 
 ### Added

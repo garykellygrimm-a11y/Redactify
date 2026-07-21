@@ -99,7 +99,7 @@ checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "app"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "redactify-core",
  "serde",
@@ -2780,7 +2780,7 @@ checksum = "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
 
 [[package]]
 name = "redactify-cli"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "clap",
  "redactify-core",
@@ -2788,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "redactify-core"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "chrono",
  "hex",

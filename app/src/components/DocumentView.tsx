@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { ScanOutcome } from "../App";
 import type { Review } from "../review";
 
@@ -9,7 +9,7 @@ interface Props {
   review: Review;
   mode: ViewMode;
   dragOver: boolean;
-  searchLine: number | null;
+  searchQuery: string;
   onBrowse: () => void;
 }
 
@@ -18,16 +18,45 @@ export function ruleHue(ruleId: string, ruleIds: string[]): number {
   return (ruleIds.indexOf(ruleId) % 5) + 1;
 }
 
-export function DocumentView({
+/** Render plain text with case-insensitive `query` occurrences marked. */
+function highlightQuery(text: string, query: string, keyBase: string) {
+  if (!query) return text;
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  const nodes: React.ReactNode[] = [];
+  let pos = 0;
+  let hit = lower.indexOf(q, pos);
+  if (hit === -1) return text;
+  while (hit !== -1) {
+    if (hit > pos) nodes.push(text.slice(pos, hit));
+    nodes.push(
+      <mark
+        key={`${keyBase}-${hit}`}
+        className="rounded-sm bg-accent-soft px-0 text-inherit"
+      >
+        {text.slice(hit, hit + q.length)}
+      </mark>,
+    );
+    pos = hit + q.length;
+    hit = lower.indexOf(q, pos);
+  }
+  if (pos < text.length) nodes.push(text.slice(pos));
+  return nodes;
+}
+
+// memo: App re-renders on every keystroke and every match step; without
+// this, all 30k rows redraw each time. The current-match row tint is
+// applied imperatively from App via .search-current + data-line, so
+// stepping matches changes NO props here and re-renders nothing.
+export const DocumentView = memo(function DocumentView({
   outcome,
   review,
   mode,
   dragOver,
-  searchLine,
+  searchQuery,
   onBrowse,
 }: Props) {
   const focusedRef = useRef<HTMLElement | null>(null);
-  const searchRef = useRef<HTMLDivElement | null>(null);
 
   const ruleIds = useMemo(
     () =>
@@ -37,13 +66,11 @@ export function DocumentView({
     [outcome],
   );
 
+  // "auto" (instant) rather than "smooth": animating a jump across tens
+  // of thousands of rows forces the webview to paint the whole journey.
   useEffect(() => {
-    focusedRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    focusedRef.current?.scrollIntoView({ block: "center", behavior: "auto" });
   }, [review.focused]);
-
-  useEffect(() => {
-    searchRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [searchLine]);
 
   if (!outcome) {
     return (
@@ -72,9 +99,7 @@ export function DocumentView({
     );
   }
 
-  // AFTER: read-only preview of the export as it stands. Accepted ->
-  // token; rejected and pending -> original text, unmarked. This is
-  // literally what redact() will produce for the current decisions.
+  // AFTER: read-only preview of the export as it stands.
   if (mode === "after") {
     return (
       <section className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6">
@@ -84,11 +109,7 @@ export function DocumentView({
         </div>
         <div className="min-w-max px-0 py-2">
           {outcome.lines.map((segments, i) => (
-            <div
-              key={i}
-              ref={i === searchLine ? searchRef : null}
-              className={`flex ${i === searchLine ? "bg-accent-soft" : ""}`}
-            >
+            <div key={i} data-line={i} className="flex">
               <span className="w-12 shrink-0 select-none pr-3 text-right text-muted/60">
                 {i + 1}
               </span>
@@ -102,7 +123,9 @@ export function DocumentView({
                       [REDACTED:{outcome.findings[seg.finding!].rule_id}]
                     </span>
                   ) : (
-                    <span key={j}>{seg.text}</span>
+                    <span key={j}>
+                      {highlightQuery(seg.text, searchQuery, `${i}-${j}`)}
+                    </span>
                   );
                 })}
               </span>
@@ -117,18 +140,18 @@ export function DocumentView({
     <section className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6">
       <div className="min-w-max px-0 py-2">
         {outcome.lines.map((segments, i) => (
-          <div
-            key={i}
-            ref={i === searchLine ? searchRef : null}
-            className={`flex ${i === searchLine ? "bg-accent-soft" : ""}`}
-          >
+          <div key={i} data-line={i} className="flex">
             <span className="w-12 shrink-0 select-none pr-3 text-right text-muted/60">
               {i + 1}
             </span>
             <span className="whitespace-pre">
               {segments.map((seg, j) => {
                 if (seg.finding === null)
-                  return <span key={j}>{seg.text}</span>;
+                  return (
+                    <span key={j}>
+                      {highlightQuery(seg.text, searchQuery, `${i}-${j}`)}
+                    </span>
+                  );
 
                 const idx = seg.finding;
                 const state = review.states[idx];
@@ -189,4 +212,4 @@ export function DocumentView({
       </div>
     </section>
   );
-}
+});

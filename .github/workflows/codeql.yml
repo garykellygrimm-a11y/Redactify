@@ -41,14 +41,14 @@ jobs:
       with:
         category: "/language:${{matrix.language}}"
 
-  # --- MARKUP LAYER: Linters for HTML & CSS ---
+  # --- MARKUP LAYER: HTMLHint + Stylelint SARIF ---
   analyze-markup:
     name: Frontend Quality Scan
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
-      actions: read   # Added to silence telemetry warnings
+      actions: read
 
     steps:
     - name: Checkout repository
@@ -65,22 +65,20 @@ jobs:
         npm install -g htmlhint
         htmlhint **/*.html --format sarif > htmlhint-results.sarif || true
 
-    # 2. Stylelint SARIF scan (corrected glob + SARIF-capable version)
+    # 2. Stylelint SARIF scan (guaranteed SARIF creation)
     - name: Scan CSS Stylesheets
       run: |
         npm install -g stylelint@15 stylelint-config-standard
         echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
-    
-        # Expand globs manually to avoid shell quoting issues
+
         FILES=$(find . -type f -name "*.css")
-    
+
         if [ -z "$FILES" ]; then
           echo "No CSS files found, creating empty SARIF"
           echo '{"version":"2.1.0","runs":[]}' > stylelint-results.sarif
         else
           stylelint $FILES --formatter sarif --output stylelint-results.sarif || true
         fi
-
 
     # 3. Debug SARIF existence
     - name: Debug SARIF existence

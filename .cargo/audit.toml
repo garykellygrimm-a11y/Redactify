@@ -1,0 +1,47 @@
+# cargo-audit configuration.
+#
+# CI runs `cargo audit --deny warnings`, so ANY advisory not listed here —
+# vulnerability or informational — fails the build. Every entry below carries
+# the reason it is ignored and the condition that should retire it.
+#
+# All current entries are inherited transitively from Tauri. None originate in
+# a dependency this project selected directly.
+
+[advisories]
+ignore = [
+  # ---------------------------------------------------------------------
+  # Tauri's Linux GTK3 stack: tauri -> wry -> webkit2gtk -> gtk -> glib.
+  # Not present in Windows or macOS builds, which never compile these
+  # crates. Unfixable downstream: the GTK3 binding generation pins glib
+  # 0.18, and the fix requires glib 0.20. Tauri tracks the migration to
+  # gtk4-rs/webkit6 in tauri-apps/tauri#12561 and #12563.
+  #
+  # RETIRE WHEN: a Tauri release ships the migrated stack and this project
+  # upgrades to it. That upgrade is a security task, not a routine bump.
+  # ---------------------------------------------------------------------
+  "RUSTSEC-2024-0429", # glib — unsound VariantStrIter iterators; this app never iterates GVariant string arrays
+  "RUSTSEC-2024-0411", # gdkwayland-sys — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0412", # gdk — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0413", # atk — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0414", # gdkx11-sys — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0415", # gtk — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0416", # atk-sys — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0417", # gdkx11 — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0418", # gdk-sys — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0419", # gtk3-macros — GTK3 bindings unmaintained
+  "RUSTSEC-2024-0420", # gtk-sys — GTK3 bindings unmaintained
+
+  # ---------------------------------------------------------------------
+  # Other unmaintained crates, all pulled in by Tauri. Informational: no
+  # known exploit, no fixed version to move to.
+  #
+  # RETIRE WHEN: Tauri's dependency tree stops requiring them.
+  # ---------------------------------------------------------------------
+  "RUSTSEC-2024-0370", # proc-macro-error — via glib-macros and gtk3-macros
+  "RUSTSEC-2020-0053", # dirs — via tauri, tauri-build, tray-icon, wry
+  "RUSTSEC-2025-0075", # unic-char-range — via urlpattern
+  "RUSTSEC-2025-0080", # unic-common — via urlpattern
+  "RUSTSEC-2025-0081", # unic-char-property — via urlpattern
+  "RUSTSEC-2025-0098", # unic-ucd-version — via urlpattern
+  "RUSTSEC-2025-0100", # unic-ucd-ident — via urlpattern
+]

@@ -14,6 +14,27 @@ A Rust detection engine serves two frontends: a desktop review app
 
 ![Redactify reviewing a log file](docs/screenshots/review-light.png)
 
+## Download
+
+Installers and binaries for the latest release are on the
+[releases page](https://github.com/garykellygrimm-a11y/Redactify/releases/latest).
+
+| Platform | Desktop app | CLI |
+| --- | --- | --- |
+| Windows | `.exe` installer or `.msi` | `redactify-cli-windows-x64.zip` |
+| macOS | `.dmg` (universal) | `redactify-cli-macos-arm64.tar.gz` |
+| Linux | `.AppImage`, `.deb`, or `.rpm` | `redactify-cli-linux-x64.tar.gz` |
+
+Builds are unsigned. Windows SmartScreen will warn — choose "More info" then
+"Run anyway". macOS may report the app as damaged; right-click it and choose
+Open, or run `xattr -d com.apple.quarantine`. AppImages need `chmod +x`
+before they will run.
+
+Every CLI archive ships a `.sha256` sidecar. Verifying a download before you
+run it is good practice generally, and fitting for this tool in particular.
+Releases are currently verified manually on Windows only; the macOS and Linux
+artifacts are built by CI. Issue reports are welcome.
+
 ## Why another redaction tool?
 
 Existing tools are fire-and-forget: text in, redacted text out, hope
@@ -152,16 +173,36 @@ Design decisions worth noting:
 
 ## Roadmap
 
+Shipped:
+
 - ✅ **M0** — Workspace, CI (fmt / clippy / test), branch policy
 - ✅ **M1** — Detection engine, builtin rules, overlap resolution, CLI
 - ✅ **M2** — Audit manifest (JSON), `Result`-based errors, `clap` CLI
 - ✅ **M3** — User-defined rules (TOML, fail-fast validation)
 - ✅ **M4** — Desktop app: review UI, export, custom rules, themes
-- ⬜ **M5** — Installers, binary releases, release automation
-- ⬜ **v0.5** — Virtualized document rendering (the remaining
-      large-file work; memoization and imperative match-stepping
-      already keep 30k-line review responsive), recent files,
-      preview-mode refinement
+- ✅ **M5** — Installers and binary releases for Windows, macOS, and Linux
+
+Planned:
+
+- ⬜ **v0.5 — Loose ends.** Virtualized document rendering for very large
+  files, a recent files menu, refinement of the before/after preview, and a
+  second attempt at automated version bumps and changelog generation.
+- ⬜ **v0.6 — Verification.** A `redactify verify` command that takes an
+  original file, its redacted output, and the manifest, and confirms the
+  chain: hashes match, every finding is accounted for, nothing was altered
+  after the fact. Plus batch processing and additional builtin rules —
+  Luhn-validated card numbers, IPv6, more cloud credential formats.
+- ⬜ **v0.7 — Rule authoring in the app.** A rule editor with live match
+  highlighting against the open document, a block-based builder for people
+  who would rather not write regex by hand, and select-to-suggest: highlight
+  an example in your file, get ranked candidate patterns with match counts,
+  and pick one. Rules are written to the same TOML the CLI reads, so nothing
+  authored in the app is trapped there.
+- ⬜ **v0.8 — Signed and self-updating.** Code-signed builds, in-app updates,
+  and distribution through winget and Homebrew.
+- ⬜ **v1.0 — Documents.** PDF and DOCX support, with redaction that removes
+  content rather than drawing rectangles over it — the failure mode that
+  leaks names out of "redacted" filings with some regularity.
 
 ## License
 

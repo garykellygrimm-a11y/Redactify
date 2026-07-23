@@ -6,10 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '30 4 * * 4' # Automated scan every Thursday at 4:30 AM UTC
+    - cron: '30 4 * * 4'
 
 jobs:
-  # --- LOGIC LAYER: CodeQL for Rust & TypeScript ---
   analyze-logic:
     name: CodeQL Logic Scan
     runs-on: ubuntu-latest
@@ -41,14 +40,13 @@ jobs:
       with:
         category: "/language:${{matrix.language}}"
 
-  # --- MARKUP LAYER: Linters for HTML & CSS ---
   analyze-markup:
     name: Frontend Quality Scan
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
-      actions: read   # Added to silence telemetry warnings
+      actions: read
 
     steps:
     - name: Checkout repository
@@ -59,21 +57,18 @@ jobs:
       with:
         node-version: '20'
 
-    # 1. HTMLHint SARIF scan
     - name: Scan HTML Layouts
       run: |
         npm install -g htmlhint
         htmlhint **/*.html --format sarif > htmlhint-results.sarif || true
 
-    # 2. Stylelint SARIF scan (corrected glob + SARIF-capable version)
     - name: Scan CSS Stylesheets
       run: |
         npm install -g stylelint@15 stylelint-config-standard
         echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
-    
-        # Expand globs manually to avoid shell quoting issues
+
         FILES=$(find . -type f -name "*.css")
-    
+
         if [ -z "$FILES" ]; then
           echo "No CSS files found, creating empty SARIF"
           echo '{"version":"2.1.0","runs":[]}' > stylelint-results.sarif
@@ -81,19 +76,15 @@ jobs:
           stylelint $FILES --formatter sarif --output stylelint-results.sarif || true
         fi
 
-
-    # 3. Debug SARIF existence
     - name: Debug SARIF existence
       run: ls -l stylelint-results.sarif || echo "SARIF file missing"
 
-    # 4. Upload HTML SARIF
     - name: Upload HTML Security Findings
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: htmlhint-results.sarif
         category: htmlhint
 
-    # 5. Upload CSS SARIF
     - name: Upload CSS Security Findings
       uses: github/codeql-action/upload-sarif@v4
       with:

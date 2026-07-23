@@ -204,6 +204,18 @@ Planned:
   content rather than drawing rectangles over it — the failure mode that
   leaks names out of "redacted" filings with some regularity.
 
+## A note from the author
+
+Redactify started as a PowerShell log-scrubbing module at work, which I later
+rewrote as a Python CLI. This project began as a rebuild of that idea from
+scratch — a different language, a different architecture, and a much larger
+scope — mostly as a way to get real practice with Rust and with building a
+desktop application end to end. It grew from there into what's now in this
+repository.
+
+This is my very first public project. Feedback, questions, and issues are welcome
+— see [CONTRIBUTING.md](CONTRIBUTING.md) if you'd like to get involved.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

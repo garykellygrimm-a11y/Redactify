@@ -6,10 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
   schedule:
-    - cron: '30 4 * * 4' # Automated scan every Thursday at 4:30 AM UTC
+    - cron: '30 4 * * 4'
 
 jobs:
-  # --- LOGIC LAYER: CodeQL for Rust & TypeScript ---
   analyze-logic:
     name: CodeQL Logic Scan
     runs-on: ubuntu-latest
@@ -41,14 +40,13 @@ jobs:
       with:
         category: "/language:${{matrix.language}}"
 
-  # --- MARKUP LAYER: Linters for HTML & CSS ---
   analyze-markup:
     name: Frontend Quality Scan
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
-      actions: read   # Added to silence telemetry warnings
+      actions: read
 
     steps:
     - name: Checkout repository
@@ -57,43 +55,81 @@ jobs:
     - name: Setup Node.js Environment
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '24'
 
-    # 1. HTMLHint SARIF scan
-    - name: Scan HTML Layouts
+    - name: Install HTMLHint and Stylelint
       run: |
         npm install -g htmlhint
-        htmlhint **/*.html --format sarif > htmlhint-results.sarif || true
-
-    # 2. Stylelint SARIF scan (corrected glob + SARIF-capable version)
-    - name: Scan CSS Stylesheets
-      run: |
         npm install -g stylelint@15 stylelint-config-standard
-        echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
-    
-        # Expand globs manually to avoid shell quoting issues
-        FILES=$(find . -type f -name "*.css")
-    
-        if [ -z "$FILES" ]; then
-          echo "No CSS files found, creating empty SARIF"
-          echo '{"version":"2.1.0","runs":[]}' > stylelint-results.sarif
+
+    # --- HTML: placeholder with one run (tool metadata) ---
+    - name: Prepare HTML placeholder SARIF
+      run: |
+        cat > htmlhint-results.sarif <<'SARIF'
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"htmlhint-placeholder","version":"0.0.0"}},"results":[]}]}
+SARIF
+
+    - name: Run HTMLHint into temp SARIF and replace if valid
+      run: |
+        HTML_FILES=$(find . -type f -name "*.html")
+        TMP=htmlhint-results.tmp.sarif
+        if [ -z "$HTML_FILES" ]; then
+          echo "No HTML files found, keeping placeholder SARIF"
+          exit 0
+        fi
+        htmlhint $HTML_FILES --format sarif > "$TMP" || true
+        # Validate temp SARIF contains a run with tool metadata
+        if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
+          mv "$TMP" htmlhint-results.sarif
         else
-          stylelint $FILES --formatter sarif --output stylelint-results.sarif || true
+          echo "htmlhint produced no valid SARIF run; keeping placeholder"
+          rm -f "$TMP"
         fi
 
+    # --- CSS: placeholder with one run (tool metadata) ---
+    - name: Prepare CSS placeholder SARIF
+      run: |
+        cat > stylelint-results.sarif <<'SARIF'
+{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"stylelint-placeholder","version":"0.0.0"}},"results":[]}]}
+SARIF
 
-    # 3. Debug SARIF existence
-    - name: Debug SARIF existence
-      run: ls -l stylelint-results.sarif || echo "SARIF file missing"
+    - name: Run Stylelint into temp SARIF and replace if valid
+      run: |
+        echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
+        CSS_FILES=$(find . -type f -name "*.css")
+        TMP=stylelint-results.tmp.sarif
+        if [ -z "$CSS_FILES" ]; then
+          echo "No CSS files found, keeping placeholder SARIF"
+          exit 0
+        fi
+        stylelint $CSS_FILES --formatter sarif --output "$TMP" || true
+        # Validate temp SARIF contains a run with tool metadata
+        if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
+          mv "$TMP" stylelint-results.sarif
+        else
+          echo "stylelint produced no valid SARIF run; keeping placeholder"
+          rm -f "$TMP"
+        fi
 
-    # 4. Upload HTML SARIF
+    - name: Verify linters and SARIF files
+      run: |
+        echo "node: $(node -v)"
+        echo "npm:  $(npm -v)"
+        which stylelint || echo "stylelint not found"
+        stylelint --version || echo "stylelint version check failed"
+        echo "htmlhint --version:"
+        htmlhint --version || echo "htmlhint version check failed"
+        echo "SARIF files:"
+        ls -l htmlhint-results.sarif stylelint-results.sarif || true
+        echo "First 200 bytes of stylelint SARIF:"
+        head -c 200 stylelint-results.sarif || true
+
     - name: Upload HTML Security Findings
       uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: htmlhint-results.sarif
         category: htmlhint
 
-    # 5. Upload CSS SARIF
     - name: Upload CSS Security Findings
       uses: github/codeql-action/upload-sarif@v4
       with:

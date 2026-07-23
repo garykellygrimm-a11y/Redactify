@@ -59,12 +59,12 @@ jobs:
     - name: Setup Node.js Environment
       uses: actions/setup-node@v4
       with:
-        node-node: '20'
+        node-version: '20'
 
-    # 1. Run HTML Quality Scan using HTMLHint
+    # 1. Run HTML Quality Scan using built-in HTMLHint SARIF formatting
     - name: Scan HTML Layouts
       run: |
-        npm install -g htmlhint @microsoft/sarif-formatter
+        npm install -g htmlhint
         htmlhint "**/*.html" --format sarif > htmlhint-results.sarif || true
 
     # 2. Run CSS Quality Scan using Stylelint

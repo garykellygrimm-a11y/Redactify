@@ -2,9 +2,9 @@ name: "Security and Quality Code Scanning"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
   schedule:
     - cron: '30 4 * * 4'
 
@@ -16,29 +16,27 @@ jobs:
       security-events: write
       actions: read
       contents: read
-
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript-typescript', 'rust' ]
-
+        language: ['javascript-typescript', 'rust']
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
-      with:
-        languages: ${{ matrix.language }}
-        queries: security-extended,security-and-quality
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
 
-    - name: Autobuild Engine
-      uses: github/codeql-action/autobuild@v4
+      - name: Autobuild Engine
+        uses: github/codeql-action/autobuild@v4
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
-      with:
-        category: "/language:${{matrix.language}}"
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{matrix.language}}"
 
   analyze-markup:
     name: Frontend Quality Scan
@@ -47,91 +45,82 @@ jobs:
       security-events: write
       contents: read
       actions: read
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Setup Node.js Environment
-      uses: actions/setup-node@v4
-      with:
-        node-version: '24'
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
-    - name: Install HTMLHint and Stylelint
-      run: |
-        npm install -g htmlhint
-        npm install -g stylelint@15 stylelint-config-standard
+      - name: Install HTMLHint and Stylelint
+        run: |
+          npm install -g htmlhint
+          npm install -g stylelint@15 stylelint-config-standard
 
-    # --- HTML: placeholder with one run (tool metadata) ---
-    - name: Prepare HTML placeholder SARIF
-      run: |
-        cat > htmlhint-results.sarif <<'SARIF'
-{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"htmlhint-placeholder","version":"0.0.0"}},"results":[]}]}
-SARIF
+      - name: Prepare HTML placeholder SARIF (safe write)
+        run: |
+          printf '%s\n' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"htmlhint-placeholder","version":"0.0.0"}},"results":[]} ]}' > htmlhint-results.sarif
 
-    - name: Run HTMLHint into temp SARIF and replace if valid
-      run: |
-        HTML_FILES=$(find . -type f -name "*.html")
-        TMP=htmlhint-results.tmp.sarif
-        if [ -z "$HTML_FILES" ]; then
-          echo "No HTML files found, keeping placeholder SARIF"
-          exit 0
-        fi
-        htmlhint $HTML_FILES --format sarif > "$TMP" || true
-        # Validate temp SARIF contains a run with tool metadata
-        if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
-          mv "$TMP" htmlhint-results.sarif
-        else
-          echo "htmlhint produced no valid SARIF run; keeping placeholder"
-          rm -f "$TMP"
-        fi
+      - name: Run HTMLHint into temp SARIF and replace if valid
+        run: |
+          HTML_FILES=$(find . -type f -name "*.html")
+          TMP=htmlhint-results.tmp.sarif
+          if [ -z "$HTML_FILES" ]; then
+            echo "No HTML files found, keeping placeholder SARIF"
+            exit 0
+          fi
+          htmlhint $HTML_FILES --format sarif > "$TMP" || true
+          if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
+            mv "$TMP" htmlhint-results.sarif
+          else
+            echo "htmlhint produced no valid SARIF run; keeping placeholder"
+            rm -f "$TMP"
+          fi
 
-    # --- CSS: placeholder with one run (tool metadata) ---
-    - name: Prepare CSS placeholder SARIF
-      run: |
-        cat > stylelint-results.sarif <<'SARIF'
-{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"stylelint-placeholder","version":"0.0.0"}},"results":[]}]}
-SARIF
+      - name: Prepare CSS placeholder SARIF (safe write)
+        run: |
+          printf '%s\n' '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"stylelint-placeholder","version":"0.0.0"}},"results":[]} ]}' > stylelint-results.sarif
 
-    - name: Run Stylelint into temp SARIF and replace if valid
-      run: |
-        echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
-        CSS_FILES=$(find . -type f -name "*.css")
-        TMP=stylelint-results.tmp.sarif
-        if [ -z "$CSS_FILES" ]; then
-          echo "No CSS files found, keeping placeholder SARIF"
-          exit 0
-        fi
-        stylelint $CSS_FILES --formatter sarif --output "$TMP" || true
-        # Validate temp SARIF contains a run with tool metadata
-        if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
-          mv "$TMP" stylelint-results.sarif
-        else
-          echo "stylelint produced no valid SARIF run; keeping placeholder"
-          rm -f "$TMP"
-        fi
+      - name: Run Stylelint into temp SARIF and replace if valid
+        run: |
+          echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
+          CSS_FILES=$(find . -type f -name "*.css")
+          TMP=stylelint-results.tmp.sarif
+          if [ -z "$CSS_FILES" ]; then
+            echo "No CSS files found, keeping placeholder SARIF"
+            exit 0
+          fi
+          stylelint $CSS_FILES --formatter sarif --output "$TMP" || true
+          if [ -s "$TMP" ] && grep -q '"runs"' "$TMP" && grep -q '"tool"' "$TMP"; then
+            mv "$TMP" stylelint-results.sarif
+          else
+            echo "stylelint produced no valid SARIF run; keeping placeholder"
+            rm -f "$TMP"
+          fi
 
-    - name: Verify linters and SARIF files
-      run: |
-        echo "node: $(node -v)"
-        echo "npm:  $(npm -v)"
-        which stylelint || echo "stylelint not found"
-        stylelint --version || echo "stylelint version check failed"
-        echo "htmlhint --version:"
-        htmlhint --version || echo "htmlhint version check failed"
-        echo "SARIF files:"
-        ls -l htmlhint-results.sarif stylelint-results.sarif || true
-        echo "First 200 bytes of stylelint SARIF:"
-        head -c 200 stylelint-results.sarif || true
+      - name: Verify linters and SARIF files
+        run: |
+          echo "node: $(node -v)"
+          echo "npm:  $(npm -v)"
+          which stylelint || echo "stylelint not found"
+          stylelint --version || echo "stylelint version check failed"
+          echo "htmlhint --version:"
+          htmlhint --version || echo "htmlhint version check failed"
+          echo "SARIF files:"
+          ls -l htmlhint-results.sarif stylelint-results.sarif || true
+          echo "First 200 bytes of stylelint SARIF:"
+          head -c 200 stylelint-results.sarif || true
 
-    - name: Upload HTML Security Findings
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: htmlhint-results.sarif
-        category: htmlhint
+      - name: Upload HTML Security Findings
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: htmlhint-results.sarif
+          category: htmlhint
 
-    - name: Upload CSS Security Findings
-      uses: github/codeql-action/upload-sarif@v4
-      with:
-        sarif_file: stylelint-results.sarif
-        category: stylelint
+      - name: Upload CSS Security Findings
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: stylelint-results.sarif
+          category: stylelint

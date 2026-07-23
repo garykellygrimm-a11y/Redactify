@@ -52,28 +52,36 @@ Fixes land in the latest release only.
 
 ## Known advisories in dependencies
 
-The desktop application's **Linux** builds inherit the GTK3 stack that Tauri v2
-uses (`tauri` → `wry` → `webkit2gtk` → `gtk` → `glib`). Several advisories apply
-to that stack. They are transitive, cannot be resolved from this project, and
-do not affect the Windows or macOS builds, which never compile these crates.
+Every advisory currently reported against this project is inherited
+transitively from Tauri. None originate in a dependency this project selected
+directly — `regex`, `serde`, `sha2`, `thiserror`, `chrono`, `toml`, and `clap`
+are all clean.
 
-| Advisory | Crate | Assessment |
+Most come from the **GTK3 stack that Tauri v2 uses on Linux**
+(`tauri` -> `wry` -> `webkit2gtk` -> `gtk` -> `glib`). These crates are not
+compiled at all in the Windows or macOS builds.
+
+| Advisory | Crate(s) | Assessment |
 | --- | --- | --- |
-| RUSTSEC-2024-0429 | `glib` 0.18.5 | Unsoundness in `VariantStrIter`'s iterator implementations. Redactify never iterates GVariant string arrays. No fixed release exists in the 0.18 line; the fix requires glib 0.20, which the GTK3 binding generation cannot use. |
-| RUSTSEC-2024-0412 | `gdk` | GTK3 bindings are unmaintained. Informational; no known exploit. |
-| RUSTSEC-2024-0413 | `atk` | GTK3 bindings are unmaintained. Informational; no known exploit. |
-| RUSTSEC-2024-0416 | `atk-sys` | GTK3 bindings are unmaintained. Informational; no known exploit. |
+| RUSTSEC-2024-0429 | `glib` 0.18.5 | Unsoundness in `VariantStrIter`'s iterator implementations. Redactify never iterates GVariant string arrays. No fix exists in the 0.18 line; the patch requires glib 0.20, which the GTK3 binding generation cannot use. |
+| RUSTSEC-2024-0411 through 0420 | `gtk`, `gdk`, `atk`, `gdkx11`, `gdkwayland-sys`, `gtk3-macros`, and their `-sys` crates | GTK3 bindings are unmaintained. Informational; no known exploit. |
+| RUSTSEC-2024-0370 | `proc-macro-error` | Unmaintained. Reached via `glib-macros` and `gtk3-macros`. |
+| RUSTSEC-2020-0053 | `dirs` | Unmaintained. Reached via `tauri`, `tauri-build`, `tray-icon`, and `wry`. |
+| RUSTSEC-2025-0075, 0080, 0081, 0098, 0100 | `unic-*` | Unmaintained. Reached via `urlpattern`. |
 
-These advisories are also present in Tauri's own release audits, which is the
+These advisories also appear in Tauri's own release audits, which is the
 clearest evidence that they are not resolvable downstream. Tauri tracks the fix
-as a migration to gtk4-rs and webkit6 ([tauri#12561](https://github.com/tauri-apps/tauri/issues/12561),
+as a migration to gtk4-rs and webkit6
+([tauri#12561](https://github.com/tauri-apps/tauri/issues/12561),
 [tauri#12563](https://github.com/tauri-apps/tauri/issues/12563)); the work is in
-progress upstream and is expected to arrive in a major Tauri release.
+progress upstream and is expected in a major Tauri release.
 
 **Our commitment:** when a Tauri release ships the migrated stack, upgrading to
 it is treated as a security task, not a routine dependency bump. Until then, CI
-runs `cargo audit` on every change with exactly these advisories allowlisted, so
-any new finding fails the build.
+runs `cargo audit --deny warnings` on every change and weekly on a schedule,
+with exactly these advisories allowlisted and justified in
+[`.cargo/audit.toml`](.cargo/audit.toml). Any new finding — vulnerability or
+informational — fails the build.
 
 ## Scope
 

@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an idea or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the [roadmap](../../README.md#roadmap) first — it may already
+        be planned, in which case a 👍 on this issue still helps prioritize it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that's currently hard or impossible?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to happen? Rough ideas are fine.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you thought about, and why you didn't prefer them.
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Where does this belong?
+      options:
+        - Desktop app
+        - CLI
+        - Core engine (affects both)
+        - Not sure
+    validations:
+      required: true

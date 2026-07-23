@@ -70,7 +70,17 @@ jobs:
       run: |
         npm install -g stylelint@15 stylelint-config-standard
         echo '{"extends": "stylelint-config-standard"}' > .stylelintrc.json
-        stylelint **/*.css --formatter sarif --output stylelint-results.sarif || true
+    
+        # Expand globs manually to avoid shell quoting issues
+        FILES=$(find . -type f -name "*.css")
+    
+        if [ -z "$FILES" ]; then
+          echo "No CSS files found, creating empty SARIF"
+          echo '{"version":"2.1.0","runs":[]}' > stylelint-results.sarif
+        else
+          stylelint $FILES --formatter sarif --output stylelint-results.sarif || true
+        fi
+
 
     # 3. Debug SARIF existence
     - name: Debug SARIF existence

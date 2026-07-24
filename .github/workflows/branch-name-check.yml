@@ -14,5 +14,5 @@ jobs:
       - name: Verify Regex Match
         uses: deepakputhraya/action-branch-name@master
         with:
-          regex: '^(feature|bugfix|hotfix|refactor|chore|docs)\/[a-z0-9-]+$'
+          regex: '^(feature|feat|bugfix|bug|hotfix|fix|refactor|chore|docs)\/[a-z0-9-]+$'
           ignore: main

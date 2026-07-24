@@ -18,7 +18,15 @@ import {
 import { VerdictStrip } from "./components/VerdictStrip";
 import { ExportSuccess } from "./components/ExportSuccess";
 import { SearchBar } from "./components/SearchBar";
+import { HelpPanel } from "./components/HelpPanel";
 import { toggleTheme } from "./theme";
+import {
+  applyTextSize,
+  loadTextSize,
+  saveTextSize,
+  stepTextSize,
+  type TextSize,
+} from "./textSize";
 import {
   Review,
   decide,
@@ -96,6 +104,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [currentMatch, setCurrentMatch] = useState(-1);
+  const [textSize, setTextSize] = useState<TextSize>(loadTextSize());
+  const [helpOpen, setHelpOpen] = useState(false);
   const dragging = useRef(false);
 
   // Shadow of `review` for callbacks that must read the CURRENT state
@@ -105,6 +115,34 @@ function App() {
   useEffect(() => {
     reviewRef.current = review;
   }, [review]);
+
+  // Push the current level to the DOM/localStorage whenever it changes.
+  // main.tsx handles the very first application (before React mounts);
+  // this effect takes over for changes made via the TopBar stepper.
+  useEffect(() => {
+    applyTextSize(textSize);
+    saveTextSize(textSize);
+  }, [textSize]);
+
+  const changeTextSize = useCallback((direction: 1 | -1) => {
+    setTextSize((cur) => stepTextSize(cur, direction));
+  }, []);
+
+  // Global: "?" opens/closes the shortcuts panel regardless of whether a
+  // document is loaded. Deliberately separate from the review-key effect
+  // below, which is gated on having an open document — there's nothing
+  // document-specific about wanting to see the shortcut list.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === "?") {
+        setHelpOpen((h) => !h);
+        e.preventDefault();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   /** True if it's safe to discard the session; asks the user when not. */
   const confirmDiscard = useCallback(async (): Promise<boolean> => {
@@ -414,7 +452,12 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col font-sans">
-      <TopBar rulesInfo={rulesInfo} />
+      <TopBar
+        rulesInfo={rulesInfo}
+        textSize={textSize}
+        onChangeTextSize={changeTextSize}
+        onOpenHelp={() => setHelpOpen(true)}
+      />
       {error && (
         <div className="border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending">
           {error}
@@ -455,6 +498,7 @@ function App() {
             dragOver={dragOver}
             searchQuery={debouncedQuery}
             currentSearchLine={currentMatch >= 0 ? matches[currentMatch] : null}
+            textSize={textSize}
             onBrowse={browse}
           />
         </div>
@@ -466,6 +510,7 @@ function App() {
           onDismiss={() => setExportResult(null)}
         />
       )}
+      <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -8,7 +8,7 @@ use redactify_core::{
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 
 /// One render-ready piece of a line: plain text, or a slice of a finding.
 #[derive(Serialize)]
@@ -39,10 +39,12 @@ struct OpenDocument {
 }
 
 /// Session state: the active rule set (builtins until a rules file is
-/// loaded) and the open document, if any.
+/// loaded), the open document if any, and recently opened file paths
+/// (most-recent-first, capped — see RECENT_FILES_CAP).
 struct AppState {
     rules: Mutex<Vec<Rule>>,
     document: Mutex<Option<OpenDocument>>,
+    recent: Mutex<Vec<String>>,
 }
 
 impl Default for AppState {
@@ -50,6 +52,7 @@ impl Default for AppState {
         AppState {
             rules: Mutex::new(builtin_rules()),
             document: Mutex::new(None),
+            recent: Mutex::new(Vec::new()),
         }
     }
 }
@@ -145,14 +148,155 @@ fn scan(path: String, text: String, rules: &[Rule]) -> (ScanOutcome, OpenDocumen
     )
 }
 
-/// Read and scan a file with the active rule set.
+// ---------------------------------------------------------------------------
+// Recent files: persisted as a small JSON array in the app's data dir.
+// Deliberately hand-rolled rather than a plugin — it's a handful of lines
+// and the project already depends on serde_json for manifests.
+// ---------------------------------------------------------------------------
+
+const RECENT_FILES_CAP: usize = 5;
+
+fn recent_files_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|dir| dir.join("recent_files.json"))
+}
+
+/// Load the persisted recent-files list, dropping any entry whose file no
+/// longer exists — a stale path in this menu (moved/deleted file) is worse
+/// than no entry at all.
+fn load_recent(app: &tauri::AppHandle) -> Vec<String> {
+    let Some(path) = recent_files_path(app) else {
+        return Vec::new();
+    };
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let list: Vec<String> = serde_json::from_str(&text).unwrap_or_default();
+    list.into_iter()
+        .filter(|p| Path::new(p).exists())
+        .take(RECENT_FILES_CAP)
+        .collect()
+}
+
+fn save_recent(app: &tauri::AppHandle, recent: &[String]) {
+    let Some(path) = recent_files_path(app) else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(recent) {
+        let _ = std::fs::write(&path, json);
+    }
+}
+
+/// Move `path` to the front of `recent`, deduplicated, capped.
+fn touch_recent(recent: &mut Vec<String>, path: &str) {
+    recent.retain(|p| p != path);
+    recent.insert(0, path.to_string());
+    recent.truncate(RECENT_FILES_CAP);
+}
+
+/// Build the native menu, including a fresh "Open Recent" submenu.
+/// Called at startup and again every time `recent` changes, since Tauri
+/// menus are static once set — a changing recent-files list means
+/// rebuilding and re-setting the whole menu, not editing one item in place.
+fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<tauri::Wry>> {
+    let open = MenuItem::with_id(app, "open", "Open…", true, Some("CmdOrCtrl+O"))?;
+
+    let recent_submenu = Submenu::new(app, "Open Recent", true)?;
+    if recent.is_empty() {
+        let none = MenuItem::with_id(app, "recent_none", "No Recent Files", false, None::<&str>)?;
+        recent_submenu.append(&none)?;
+    } else {
+        for (i, path) in recent.iter().enumerate() {
+            let label = Path::new(path)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.clone());
+            let item = MenuItem::with_id(app, format!("recent:{i}"), label, true, None::<&str>)?;
+            recent_submenu.append(&item)?;
+        }
+        recent_submenu.append(&PredefinedMenuItem::separator(app)?)?;
+        let clear = MenuItem::with_id(
+            app,
+            "clear_recent",
+            "Clear Recent Files",
+            true,
+            None::<&str>,
+        )?;
+        recent_submenu.append(&clear)?;
+    }
+
+    let rules = MenuItem::with_id(app, "load_rules", "Load Rules…", true, Some("CmdOrCtrl+L"))?;
+    let close_doc = MenuItem::with_id(
+        app,
+        "close_document",
+        "Close Document",
+        true,
+        Some("CmdOrCtrl+W"),
+    )?;
+    let file = Submenu::with_items(
+        app,
+        "File",
+        true,
+        &[
+            &open,
+            &recent_submenu,
+            &rules,
+            &close_doc,
+            &PredefinedMenuItem::separator(app)?,
+            &PredefinedMenuItem::quit(app, Some("Exit"))?,
+        ],
+    )?;
+
+    let preview = MenuItem::with_id(
+        app,
+        "toggle_preview",
+        "Before / After Preview",
+        true,
+        Some("CmdOrCtrl+D"),
+    )?;
+    let theme = MenuItem::with_id(
+        app,
+        "toggle_theme",
+        "Toggle Theme",
+        true,
+        Some("CmdOrCtrl+T"),
+    )?;
+    let view = Submenu::with_items(app, "View", true, &[&preview, &theme])?;
+
+    Menu::with_items(app, &[&file, &view])
+}
+
+/// Read and scan a file with the active rule set. Also registers the path
+/// in the recent-files list and rebuilds the menu to reflect it — every
+/// way a file gets opened (Browse, drag-drop, or a recent-file click) goes
+/// through this one command, so this is the single place that needs to know.
 #[tauri::command]
-fn open_file(path: String, state: State<AppState>) -> Result<ScanOutcome, String> {
+fn open_file(
+    path: String,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<ScanOutcome, String> {
     let text =
         std::fs::read_to_string(&path).map_err(|e| format!("Could not read '{path}': {e}"))?;
     let rules = state.rules.lock().unwrap();
-    let (outcome, doc) = scan(path, text, &rules);
+    let (outcome, doc) = scan(path.clone(), text, &rules);
     *state.document.lock().unwrap() = Some(doc);
+
+    let recent_snapshot = {
+        let mut recent = state.recent.lock().unwrap();
+        touch_recent(&mut recent, &path);
+        recent.clone()
+    };
+    save_recent(&app, &recent_snapshot);
+    if let Ok(menu) = build_menu(&app, &recent_snapshot) {
+        let _ = app.set_menu(menu);
+    }
+
     Ok(outcome)
 }
 
@@ -259,50 +403,45 @@ pub fn run() {
             export
         ])
         .setup(|app| {
-            let open = MenuItem::with_id(app, "open", "Open…", true, Some("CmdOrCtrl+O"))?;
-            let rules =
-                MenuItem::with_id(app, "load_rules", "Load Rules…", true, Some("CmdOrCtrl+L"))?;
-            let close_doc = MenuItem::with_id(
-                app,
-                "close_document",
-                "Close Document",
-                true,
-                Some("CmdOrCtrl+W"),
-            )?;
-            let file = Submenu::with_items(
-                app,
-                "File",
-                true,
-                &[
-                    &open,
-                    &rules,
-                    &close_doc,
-                    &PredefinedMenuItem::separator(app)?,
-                    &PredefinedMenuItem::quit(app, Some("Exit"))?,
-                ],
-            )?;
+            let handle = app.handle().clone();
+            let recent = load_recent(&handle);
+            *app.state::<AppState>().recent.lock().unwrap() = recent.clone();
 
-            let preview = MenuItem::with_id(
-                app,
-                "toggle_preview",
-                "Before / After Preview",
-                true,
-                Some("CmdOrCtrl+D"),
-            )?;
-            let theme = MenuItem::with_id(
-                app,
-                "toggle_theme",
-                "Toggle Theme",
-                true,
-                Some("CmdOrCtrl+T"),
-            )?;
-            let view = Submenu::with_items(app, "View", true, &[&preview, &theme])?;
-
-            let menu = Menu::with_items(app, &[&file, &view])?;
+            let menu = build_menu(&handle, &recent)?;
             app.set_menu(menu)?;
 
             app.on_menu_event(|app, event| {
-                let _ = app.emit("menu", event.id().0.clone());
+                let id = event.id().0.clone();
+
+                // Recent-file clicks carry a path, so they go out on their
+                // own event rather than the generic "menu" channel, which
+                // only ever carried bare action ids.
+                if let Some(idx_str) = id.strip_prefix("recent:") {
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        let path = app
+                            .state::<AppState>()
+                            .recent
+                            .lock()
+                            .unwrap()
+                            .get(idx)
+                            .cloned();
+                        if let Some(path) = path {
+                            let _ = app.emit("open_path", path);
+                        }
+                    }
+                    return;
+                }
+
+                if id == "clear_recent" {
+                    app.state::<AppState>().recent.lock().unwrap().clear();
+                    save_recent(app, &[]);
+                    if let Ok(menu) = build_menu(app, &[]) {
+                        let _ = app.set_menu(menu);
+                    }
+                    return;
+                }
+
+                let _ = app.emit("menu", id);
             });
 
             Ok(())

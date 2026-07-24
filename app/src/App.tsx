@@ -10,7 +10,11 @@ import {
 } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
 import { Sidebar } from "./components/Sidebar";
-import { DocumentView, type ViewMode } from "./components/DocumentView";
+import {
+  DocumentView,
+  type DocumentViewHandle,
+  type ViewMode,
+} from "./components/DocumentView";
 import { VerdictStrip } from "./components/VerdictStrip";
 import { ExportSuccess } from "./components/ExportSuccess";
 import { SearchBar } from "./components/SearchBar";
@@ -143,19 +147,16 @@ function App() {
     setCurrentMatch(matches.length > 0 ? 0 : -1);
   }, [matches]);
 
-  // Current-match highlight is applied imperatively: stepping matches
-  // must not re-render 30k document rows just to move one row's tint.
-  const prevSearchEl = useRef<Element | null>(null);
+  // Current-match row tint is now a plain prop on DocumentView (see
+  // currentSearchLine below) — cheap to re-render because virtualization
+  // means only the visible rows are ever mounted. Scrolling the match
+  // into view is the one thing that still has to happen imperatively,
+  // since the target row may not be mounted yet; scrollToLine drives the
+  // virtualizer directly instead of querying the DOM for it.
+  const documentViewRef = useRef<DocumentViewHandle>(null);
   useEffect(() => {
-    prevSearchEl.current?.classList.remove("search-current");
-    prevSearchEl.current = null;
     if (currentMatch < 0) return;
-    const el = document.querySelector(`[data-line="${matches[currentMatch]}"]`);
-    if (el) {
-      el.classList.add("search-current");
-      el.scrollIntoView({ block: "center", behavior: "auto" });
-      prevSearchEl.current = el;
-    }
+    documentViewRef.current?.scrollToLine(matches[currentMatch]);
   }, [currentMatch, matches]);
 
   const nextMatch = useCallback(() => {
@@ -435,11 +436,13 @@ function App() {
         />
         <div className="min-w-0 flex-1">
           <DocumentView
+            ref={documentViewRef}
             outcome={outcome}
             review={review}
             mode={viewMode}
             dragOver={dragOver}
             searchQuery={debouncedQuery}
+            currentSearchLine={currentMatch >= 0 ? matches[currentMatch] : null}
             onBrowse={browse}
           />
         </div>

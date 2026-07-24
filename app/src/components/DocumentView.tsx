@@ -7,6 +7,7 @@ import {
   useRef,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { TEXT_SIZE_METRICS, type TextSize } from "../textSize";
 import type { ScanOutcome } from "../App";
 import type { Review } from "../review";
 
@@ -20,6 +21,7 @@ interface Props {
   searchQuery: string;
   /** Line index of the current search match, for the row tint. */
   currentSearchLine: number | null;
+  textSize: TextSize;
   onBrowse: () => void;
 }
 
@@ -29,21 +31,23 @@ export interface DocumentViewHandle {
   scrollToLine: (line: number) => void;
 }
 
-/**
- * Pixel height of one document row: font-mono text-[13px] leading-6 = 24px.
- * Single source of truth for the virtualizer's row-size estimate. If the
- * row's type scale ever becomes user-adjustable (e.g. an accessibility
- * text-size setting), this is the one constant that needs to become a
- * function of that setting — the virtualizer itself already takes
- * `estimateSize` as a callback, so it doesn't need to change shape, just
- * what it reads.
- */
-const ROW_HEIGHT_PX = 24;
-
 /** Stable rule_id -> palette slot (1-5). Same rule, same hue, every file. */
 export function ruleHue(ruleId: string, ruleIds: string[]): number {
   return (ruleIds.indexOf(ruleId) % 5) + 1;
 }
+
+/**
+ * Underline style per rule slot, aligned 1:1 with the 5 rule-hue colors.
+ * Pending findings are colored AND shaped by rule now, not color alone —
+ * a colorblind reviewer can still tell rule categories apart by pattern.
+ */
+const RULE_UNDERLINE_STYLES = [
+  "solid",
+  "dashed",
+  "dotted",
+  "double",
+  "wavy",
+] as const;
 
 /** Render plain text with case-insensitive `query` occurrences marked. */
 function highlightQuery(text: string, query: string, keyBase: string) {
@@ -80,17 +84,35 @@ function highlightQuery(text: string, query: string, keyBase: string) {
 // one thing App still needs to trigger imperatively (a scroll jump).
 export const DocumentView = memo(
   forwardRef<DocumentViewHandle, Props>(function DocumentView(
-    { outcome, review, mode, dragOver, searchQuery, currentSearchLine, onBrowse },
+    {
+      outcome,
+      review,
+      mode,
+      dragOver,
+      searchQuery,
+      currentSearchLine,
+      textSize,
+      onBrowse,
+    },
     ref,
   ) {
     const parentRef = useRef<HTMLDivElement | null>(null);
+    const rowPx = TEXT_SIZE_METRICS[textSize].rowPx;
 
     const rowVirtualizer = useVirtualizer({
       count: outcome ? outcome.lines.length : 0,
       getScrollElement: () => parentRef.current,
-      estimateSize: () => ROW_HEIGHT_PX,
+      estimateSize: () => rowPx,
       overscan: 20,
     });
+
+    // The virtualizer caches measured row sizes internally — changing
+    // what estimateSize() returns on a later render doesn't retroactively
+    // resize rows it already measured. Forcing a re-measure is how a
+    // text-size change actually takes effect on an already-open document.
+    useEffect(() => {
+      rowVirtualizer.measure();
+    }, [rowPx, rowVirtualizer]);
 
     const ruleIds = useMemo(
       () =>
@@ -245,15 +267,17 @@ export const DocumentView = memo(
           );
         }
 
+        const hue = ruleHue(oc.findings[idx].rule_id, ruleIds);
         return (
           <mark
             key={j}
             className="rounded-sm bg-pending-soft px-0.5 text-text"
             style={{
-              boxShadow: `inset 0 -2px 0 var(--rule-${ruleHue(
-                oc.findings[idx].rule_id,
-                ruleIds,
-              )})`,
+              textDecorationLine: "underline",
+              textDecorationStyle: RULE_UNDERLINE_STYLES[hue - 1],
+              textDecorationColor: `var(--rule-${hue})`,
+              textDecorationThickness: "2px",
+              textUnderlineOffset: "3px",
               ...focusRing,
             }}
             title={`pending · ${oc.findings[idx].rule_id}`}
@@ -267,7 +291,11 @@ export const DocumentView = memo(
     return (
       <section
         ref={parentRef}
-        className="h-full overflow-auto bg-surface-sunken font-mono text-[13px] leading-6"
+        className="h-full overflow-auto bg-surface-sunken font-mono"
+        style={{
+          fontSize: "var(--doc-font-size)",
+          lineHeight: "var(--doc-row-height)",
+        }}
       >
         {mode === "after" && (
           <div className="sticky top-0 z-[1] border-b border-border bg-surface-raised px-4 py-1 text-xs text-muted">

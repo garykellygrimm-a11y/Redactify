@@ -1,12 +1,27 @@
 import { useState } from "react";
 import { toggleTheme } from "../theme";
+import type { TextSize } from "../textSize";
 import type { RulesInfo } from "../App";
 
 interface Props {
   rulesInfo: RulesInfo | null;
+  textSize: TextSize;
+  onChangeTextSize: (direction: 1 | -1) => void;
+  onOpenHelp: () => void;
 }
 
-export function TopBar({ rulesInfo }: Props) {
+const SIZE_LABEL: Record<TextSize, string> = {
+  small: "S",
+  medium: "M",
+  large: "L",
+};
+
+export function TopBar({
+  rulesInfo,
+  textSize,
+  onChangeTextSize,
+  onOpenHelp,
+}: Props) {
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme ?? "light",
   );
@@ -28,12 +43,40 @@ export function TopBar({ rulesInfo }: Props) {
         </span>
       )}
       <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center overflow-hidden rounded-md border border-border">
+          <button
+            onClick={() => onChangeTextSize(-1)}
+            disabled={textSize === "small"}
+            className="px-2 py-1 text-xs text-muted hover:bg-surface-sunken disabled:opacity-30"
+            title="Decrease text size"
+          >
+            A−
+          </button>
+          <span className="border-x border-border px-1.5 py-1 text-xs text-muted">
+            {SIZE_LABEL[textSize]}
+          </span>
+          <button
+            onClick={() => onChangeTextSize(1)}
+            disabled={textSize === "large"}
+            className="px-2 py-1 text-xs text-muted hover:bg-surface-sunken disabled:opacity-30"
+            title="Increase text size"
+          >
+            A+
+          </button>
+        </div>
         <button
           onClick={() => setTheme(toggleTheme())}
           className="rounded-md border border-border px-2.5 py-1 text-sm text-muted hover:bg-surface-sunken"
           title="Toggle theme"
         >
           {theme === "dark" ? "☀" : "☾"}
+        </button>
+        <button
+          onClick={onOpenHelp}
+          className="rounded-md border border-border px-2.5 py-1 text-sm text-muted hover:bg-surface-sunken"
+          title="Keyboard shortcuts (?)"
+        >
+          ?
         </button>
       </div>
     </header>

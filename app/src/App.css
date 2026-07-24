@@ -34,6 +34,13 @@
   --rule-3: #be185d; /* pink   */
   --rule-4: #047857; /* green  */
   --rule-5: #b91c1c; /* red    */
+
+  /* document text size — defaults match the "medium" level in
+     textSize.ts; overridden inline on <html> once JS applies the
+     persisted/OS-derived level, but present here so there's no flash of
+     unstyled size on first paint before that runs. */
+  --doc-font-size: 13px;
+  --doc-row-height: 24px;
 }
 
 [data-theme="dark"] {
@@ -97,4 +104,19 @@ body {
    stepping between matches never re-renders the document tree. */
 .search-current {
   background: var(--accent-soft);
+}
+
+/* Respect the OS-level reduced-motion preference. A blanket override
+   rather than fixing each transition-* utility individually — new
+   transitions added later are covered automatically instead of silently
+   falling outside this rule. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }

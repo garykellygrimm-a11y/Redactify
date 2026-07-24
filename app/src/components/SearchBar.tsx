@@ -37,7 +37,7 @@ export function SearchBar({
           if (e.key === "Escape") onClose();
         }}
         placeholder="Search document…"
-        className="w-64 rounded-md border border-border bg-surface-sunken px-2 py-1 font-mono text-sm outline-none focus:border-accent"
+        className="w-64 rounded-md border border-border bg-surface-sunken px-2 py-1 font-mono text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent"
       />
       <span className="text-xs text-muted">
         {query

@@ -155,7 +155,7 @@ export const Sidebar = memo(function Sidebar({
         })}
       </div>
       <div className="border-t border-border px-4 py-2 text-[11px] text-muted">
-        j/k walk · a accept · r reject · A/R whole rule · u undo
+        ↑/↓ walk · a accept · r reject · Shift+A/R whole rule · Ctrl+Z undo
       </div>
     </aside>
   );

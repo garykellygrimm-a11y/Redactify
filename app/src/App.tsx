@@ -106,6 +106,11 @@ function App() {
   const [currentMatch, setCurrentMatch] = useState(-1);
   const [textSize, setTextSize] = useState<TextSize>(loadTextSize());
   const [helpOpen, setHelpOpen] = useState(false);
+  // Export destination remembered for this review session only — reset
+  // whenever a new document loads, rules force a rescan, or the document
+  // closes. Not persisted; "the place I'm saving THIS review" shouldn't
+  // survive to a different file.
+  const [lastExportPath, setLastExportPath] = useState<string | null>(null);
   const dragging = useRef(false);
 
   // Shadow of `review` for callbacks that must read the CURRENT state
@@ -221,6 +226,7 @@ function App() {
         const result = await invoke<ScanOutcome>("open_file", { path });
         setOutcome(result);
         setReview(emptyReview(result.findings.length));
+        setLastExportPath(null);
         const name = path.replace(/^.*[\\/]/, "");
         void getCurrentWindow().setTitle(`${name} — Redactify`);
       } catch (e) {
@@ -265,6 +271,7 @@ function App() {
         setReview(emptyReview(result.rescanned.findings.length));
         setExportResult(null);
         setViewMode("before");
+        setLastExportPath(null);
       }
     } catch (e) {
       setError(String(e));
@@ -279,12 +286,23 @@ function App() {
     setExportResult(null);
     setError(null);
     setViewMode("before");
+    setLastExportPath(null);
     closeSearch();
     void getCurrentWindow().setTitle("Redactify");
   }, [closeSearch, confirmDiscard]);
 
+  // Both Save and Export share the same rule the button already enforces
+  // visually (disabled until every finding is decided) — but a keyboard
+  // shortcut has no disabled state to respect, so the check has to live
+  // here too. Without it, Ctrl+S/Ctrl+E could write a file with pending
+  // findings silently treated as rejected.
   const doExport = useCallback(async () => {
     if (!outcome) return;
+    const { pending } = tally(review);
+    if (pending > 0) {
+      setError("Every finding must be decided before exporting.");
+      return;
+    }
     const target = await saveDialog({
       defaultPath: defaultExportName(outcome.path),
     });
@@ -294,16 +312,46 @@ function App() {
       const accepted = review.states
         .map((s, i) => (s === "accepted" ? i : -1))
         .filter((i) => i >= 0);
-      setExportResult(
-        await invoke<ExportOutcome>("export", {
-          outputPath: target,
-          accepted,
-        }),
-      );
+      const result = await invoke<ExportOutcome>("export", {
+        outputPath: target,
+        accepted,
+      });
+      setLastExportPath(target);
+      setExportResult(result);
     } catch (e) {
       setError(String(e));
     }
-  }, [outcome, review.states]);
+  }, [outcome, review]);
+
+  // Save: reuse the last export destination this session, no dialog. The
+  // very first save (or the first after a rescan/new document, which
+  // clears lastExportPath) has nothing to reuse yet, so it falls back to
+  // the same prompt-and-remember behavior as Export.
+  const doSave = useCallback(async () => {
+    if (!outcome) return;
+    if (!lastExportPath) {
+      await doExport();
+      return;
+    }
+    const { pending } = tally(review);
+    if (pending > 0) {
+      setError("Every finding must be decided before saving.");
+      return;
+    }
+    try {
+      setError(null);
+      const accepted = review.states
+        .map((s, i) => (s === "accepted" ? i : -1))
+        .filter((i) => i >= 0);
+      const result = await invoke<ExportOutcome>("export", {
+        outputPath: lastExportPath,
+        accepted,
+      });
+      setExportResult(result);
+    } catch (e) {
+      setError(String(e));
+    }
+  }, [outcome, review, lastExportPath, doExport]);
 
   // Native menu events from Rust: one channel, routed by id.
   useEffect(() => {
@@ -318,6 +366,12 @@ function App() {
         case "close_document":
           void closeDocument();
           break;
+        case "save":
+          void doSave();
+          break;
+        case "export":
+          void doExport();
+          break;
         case "toggle_preview":
           setViewMode((m) => (m === "before" ? "after" : "before"));
           break;
@@ -329,11 +383,11 @@ function App() {
     return () => {
       void unlisten.then((f) => f());
     };
-  }, [browse, loadRules, closeDocument]);
+  }, [browse, loadRules, closeDocument, doSave, doExport]);
 
   // Keyboard doctrine: arrows walk, a/r decide, Shift+A/R decide-by-rule,
-  // Ctrl+Z undo, Ctrl+F search, Ctrl+D preview. Review keys stay quiet in
-  // inputs.
+  // Ctrl+Z undo, Ctrl+F search, Ctrl+D preview, Ctrl+S save, Ctrl+E
+  // export. Review keys stay quiet in inputs.
   useEffect(() => {
     if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
@@ -345,6 +399,16 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === "d") {
         setViewMode((m) => (m === "before" ? "after" : "before"));
         e.preventDefault();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        void doSave();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "e") {
+        e.preventDefault();
+        void doExport();
         return;
       }
       if (e.target instanceof HTMLInputElement) return;
@@ -392,7 +456,7 @@ function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [outcome, review.focused, exportResult, closeSearch]);
+  }, [outcome, review.focused, exportResult, closeSearch, doSave, doExport]);
 
   // Native drag-and-drop: Tauri surfaces real file paths, which the
   // browser's own drop events cannot do inside a webview.

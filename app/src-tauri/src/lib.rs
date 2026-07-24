@@ -231,6 +231,8 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
     }
 
     let rules = MenuItem::with_id(app, "load_rules", "Load Rules…", true, Some("CmdOrCtrl+L"))?;
+    let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
+    let export = MenuItem::with_id(app, "export", "Export…", true, Some("CmdOrCtrl+E"))?;
     let close_doc = MenuItem::with_id(
         app,
         "close_document",
@@ -246,6 +248,10 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
             &open,
             &recent_submenu,
             &rules,
+            &PredefinedMenuItem::separator(app)?,
+            &save,
+            &export,
+            &PredefinedMenuItem::separator(app)?,
             &close_doc,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("Exit"))?,

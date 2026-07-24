@@ -28,6 +28,8 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: "Ctrl+F", description: "Search the document" },
       { keys: "Ctrl+D", description: "Toggle before/after output preview" },
+      { keys: "Ctrl+S", description: "Save (reuses the last export destination)" },
+      { keys: "Ctrl+E", description: "Export (always asks where to save)" },
     ],
   },
   {

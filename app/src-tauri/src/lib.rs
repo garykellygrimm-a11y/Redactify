@@ -220,17 +220,13 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
             recent_submenu.append(&item)?;
         }
         recent_submenu.append(&PredefinedMenuItem::separator(app)?)?;
-        let clear = MenuItem::with_id(
-            app,
-            "clear_recent",
-            "Clear Recent Files",
-            true,
-            None::<&str>,
-        )?;
+        let clear = MenuItem::with_id(app, "clear_recent", "Clear Recent Files", true, None::<&str>)?;
         recent_submenu.append(&clear)?;
     }
 
     let rules = MenuItem::with_id(app, "load_rules", "Load Rules…", true, Some("CmdOrCtrl+L"))?;
+    let save = MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?;
+    let export = MenuItem::with_id(app, "export", "Export…", true, Some("CmdOrCtrl+E"))?;
     let close_doc = MenuItem::with_id(
         app,
         "close_document",
@@ -246,6 +242,10 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
             &open,
             &recent_submenu,
             &rules,
+            &PredefinedMenuItem::separator(app)?,
+            &save,
+            &export,
+            &PredefinedMenuItem::separator(app)?,
             &close_doc,
             &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::quit(app, Some("Exit"))?,
@@ -259,13 +259,7 @@ fn build_menu(app: &tauri::AppHandle, recent: &[String]) -> tauri::Result<Menu<t
         true,
         Some("CmdOrCtrl+D"),
     )?;
-    let theme = MenuItem::with_id(
-        app,
-        "toggle_theme",
-        "Toggle Theme",
-        true,
-        Some("CmdOrCtrl+T"),
-    )?;
+    let theme = MenuItem::with_id(app, "toggle_theme", "Toggle Theme", true, Some("CmdOrCtrl+T"))?;
     let view = Submenu::with_items(app, "View", true, &[&preview, &theme])?;
 
     Menu::with_items(app, &[&file, &view])

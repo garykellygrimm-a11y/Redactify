@@ -197,6 +197,18 @@ function App() {
     if (typeof picked === "string") await loadPath(picked);
   }, [loadPath]);
 
+  // Recent-file menu clicks carry a real path, unlike the generic "menu"
+  // channel's bare action ids — Rust emits this separately so it can send
+  // that payload.
+  useEffect(() => {
+    const unlisten = listen<string>("open_path", (event) => {
+      void loadPath(event.payload);
+    });
+    return () => {
+      void unlisten.then((f) => f());
+    };
+  }, [loadPath]);
+
   const loadRules = useCallback(async () => {
     const picked = await openDialog({
       multiple: false,

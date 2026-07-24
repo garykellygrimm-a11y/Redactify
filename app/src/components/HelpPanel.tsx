@@ -14,13 +14,13 @@ const GROUPS: ShortcutGroup[] = [
   {
     title: "Review",
     items: [
-      { keys: "j / k", description: "Walk findings" },
+      { keys: "↑ / ↓", description: "Walk findings" },
       { keys: "a / r", description: "Accept / reject the focused finding" },
       {
-        keys: "A / R",
+        keys: "Shift+A / Shift+R",
         description: "Accept / reject every pending finding of the rule",
       },
-      { keys: "u", description: "Undo the last decision" },
+      { keys: "Ctrl+Z", description: "Undo the last decision" },
     ],
   },
   {

@@ -64,10 +64,10 @@ in under 200 ms.
 
 | Key | Action |
 | --- | --- |
-| `j` / `k` | Walk findings (document auto-scrolls) |
+| `↑` / `↓` | Walk findings (document auto-scrolls) |
 | `a` / `r` | Accept / reject the focused finding, advance |
-| `A` / `R` | Accept / reject every pending finding of the rule |
-| `u` | Undo the last decision (repeat to walk back) |
+| `Shift+A` / `Shift+R` | Accept / reject every pending finding of the rule |
+| `Ctrl+Z` | Undo the last decision (repeat to walk back) |
 | `Ctrl+F` | Search the document |
 | `Ctrl+D` | Toggle before/after output preview |
 | `Ctrl+O` / `Ctrl+L` / `Ctrl+W` | Open file / load rules / close document |

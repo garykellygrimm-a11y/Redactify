@@ -164,8 +164,8 @@ export const DocumentView = memo(
       [rowVirtualizer],
     );
 
-    // Keep the focused finding's row in view as j/k (or a sidebar click)
-    // moves focus. Replaces the old focusedRef + scrollIntoView, which
+    // Keep the focused finding's row in view as the arrow keys (or a
+    // sidebar click) move focus. Replaces the old focusedRef + scrollIntoView, which
     // only worked because every row was always mounted.
     useEffect(() => {
       if (mode !== "before" || review.focused === null) return;

@@ -331,8 +331,9 @@ function App() {
     };
   }, [browse, loadRules, closeDocument]);
 
-  // Keyboard doctrine: j/k walk, a/r decide, A/R decide-by-rule, u undo,
-  // Ctrl+F search, Ctrl+D preview. Review keys stay quiet in inputs.
+  // Keyboard doctrine: arrows walk, a/r decide, Shift+A/R decide-by-rule,
+  // Ctrl+Z undo, Ctrl+F search, Ctrl+D preview. Review keys stay quiet in
+  // inputs.
   useEffect(() => {
     if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
@@ -351,14 +352,17 @@ function App() {
         closeSearch();
         return;
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        setReview((r) => undo(r));
+        e.preventDefault();
+        return;
+      }
       const focused = review.focused;
       switch (e.key) {
-        case "j":
         case "ArrowDown":
           setReview((r) => focusNext(r));
           e.preventDefault();
           break;
-        case "k":
         case "ArrowUp":
           setReview((r) => focusPrev(r));
           e.preventDefault();
@@ -384,9 +388,6 @@ function App() {
           );
           break;
         }
-        case "u":
-          setReview((r) => undo(r));
-          break;
       }
     }
     window.addEventListener("keydown", onKey);

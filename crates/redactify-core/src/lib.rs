@@ -128,6 +128,262 @@ mod tests {
         assert!(detect("key=BKIAIOSFODNN7EXAMPLE used", &rules).is_empty());
     }
 
+    #[test]
+    fn gcp_api_key_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "key: AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123 saved";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "gcp_api_key");
+        assert_eq!(f[0].matched, "AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123");
+        // near-miss: wrong prefix
+        assert!(detect("key: BIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123 saved", &rules).is_empty());
+    }
+
+    #[test]
+    fn gcp_oauth_client_id_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text =
+            "client_id=123456789012-abc123def456ghi789jkl012mno345.apps.googleusercontent.com";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "gcp_oauth_client_id");
+        // near-miss: right shape, wrong domain
+        assert!(
+            detect(
+                "client_id=123456789012-abc123def456ghi789jkl012mno345.apps.example.com",
+                &rules
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn oracle_ocid_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "resource: ocid1.instance.oc1.iad.abuwcljtwfk7f5e2o3q6ircgpdty6rg52itdyg72tgdtbiwqlujt7vm5h3da here";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "oracle_ocid");
+        // near-miss: wrong version literal ("ocid2" instead of "ocid1")
+        assert!(detect(
+            "resource: ocid2.instance.oc1.iad.abuwcljtwfk7f5e2o3q6ircgpdty6rg52itdyg72tgdtbiwqlujt7vm5h3da here",
+            &rules
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn oracle_ocid_allows_empty_region() {
+        let rules = builtin_rules();
+        // Tenancy OCIDs have no region segment (two consecutive dots).
+        let f = detect(
+            "tenancy: ocid1.tenancy.oc1..aaaaaaaazaizaakcbfd33qif7atm2a5vwppteukesf6dtyxpxgm66kvx3fmq",
+            &rules,
+        );
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "oracle_ocid");
+    }
+
+    #[test]
+    fn azure_sas_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "token: sv=2015-04-05&st=2015-04-29T22:18:26Z&se=2015-04-30T02:23:26Z&sig=F6GRVAZ5Cdj2Pw4tgU7IlSTkWgn7bUkkAg8P6HESXwmf4B in logs";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "azure_sas_token");
+        // near-miss: version present, but no signature parameter at all
+        assert!(
+            detect(
+                "token: sv=2015-04-05&st=2015-04-29T22:18:26Z with no signature",
+                &rules
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn private_key_block_detects_and_rejects() {
+        let rules = builtin_rules();
+        let f = detect("-----BEGIN RSA PRIVATE KEY-----\nMIIEow...", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "private_key_block");
+        // near-miss: a PEM block, but not a private key
+        assert!(detect("-----BEGIN CERTIFICATE-----\nMIIDXT...", &rules).is_empty());
+    }
+
+    #[test]
+    fn stripe_api_key_detects_and_rejects() {
+        let rules = builtin_rules();
+        let f = detect("key: sk_live_4eC39HqLyjWDarjtT1zdp7dc used", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "stripe_api_key");
+        // near-miss: "liv" instead of "live"
+        assert!(detect("key: sk_liv_4eC39HqLyjWDarjtT1zdp7dc used", &rules).is_empty());
+    }
+
+    #[test]
+    fn digitalocean_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text =
+            "token: dop_v1_60b49e2a8032f922d2001ea8a7b6c8ca63aefb197c3a0b83d0f588cfa8de1c8c used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "digitalocean_token");
+        // near-miss: suffix too short
+        assert!(detect("token: dop_v1_60b49e2a used", &rules).is_empty());
+    }
+
+    #[test]
+    fn sendgrid_api_key_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text =
+            "key: SG.aBcDeFgHiJkLmNoPqRsT12.zZyYxXwWvVuUtTsSrRqQpPoOnNmMlLkKjJiIhHgGfFe used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "sendgrid_api_key");
+        // near-miss: no second dot-separated segment
+        assert!(detect("key: SG.notarealkeyformat used", &rules).is_empty());
+    }
+
+    #[test]
+    fn github_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let f = detect(
+            "token: ghp_16C7e42F292c6912E7710c838347Ae178B4a used",
+            &rules,
+        );
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "github_token");
+        // near-miss: suffix too short for either classic or fine-grained shape
+        assert!(detect("token: ghp_short used", &rules).is_empty());
+    }
+
+    #[test]
+    fn slack_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text =
+            "token: xoxb-96219857393-62330539414-22147117595-9d8cfc0f596f1ed002ab5595859014e used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "slack_token");
+        // near-miss: bare prefix with nothing after it (a real bug found
+        // in another project's Slack-token regex, worth guarding against
+        // explicitly rather than trusting the pattern by inspection)
+        assert!(detect("just a bare xoxb- with nothing after", &rules).is_empty());
+    }
+
+    #[test]
+    fn hashicorp_vault_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "token: hvs.CAESILfkHZ292kPHfJlESXBMdWxsdnUabcdefghijklmno used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "hashicorp_vault_token");
+        // near-miss: suffix too short
+        assert!(detect("token: hvs.tooshort used", &rules).is_empty());
+    }
+
+    #[test]
+    fn ipv6_detects_common_forms() {
+        let rules = builtin_rules();
+        let f = detect("server at 2001:db8:85a3::8a2e:370:7334 responded", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "ipv6");
+        assert_eq!(f[0].matched, "2001:db8:85a3::8a2e:370:7334");
+
+        let f2 = detect("loopback is ::1 here", &rules);
+        assert_eq!(f2.len(), 1);
+        assert_eq!(f2[0].rule_id, "ipv6");
+        assert_eq!(f2[0].matched, "::1");
+    }
+
+    #[test]
+    fn ipv6_rejects_time_and_ratio_like_pairs() {
+        let rules = builtin_rules();
+        // near-miss: a single colon (times, ratios) is not valid IPv6 —
+        // every real form has at least two colons.
+        assert!(detect("call me at 12:34 for lunch", &rules).is_empty());
+        assert!(detect("score was 16:9 in the game", &rules).is_empty());
+    }
+
+    #[test]
+    fn ipv6_rejects_hh_mm_ss_timestamps() {
+        let rules = builtin_rules();
+        // Regression test: an HH:MM:SS timestamp has exactly 2 colons
+        // and all-digit (= valid hex) groups, which an earlier, more
+        // liberal version of this rule accepted as a plausible short
+        // IPv6 address — a real bug, caught via a Python prototype of
+        // this same rule matching timestamps in log files during
+        // manual review, not just a theoretical near-miss. A 2-3 group
+        // address with single colons and no "::" was never valid IPv6
+        // in the first place (compression via "::" is the only way to
+        // have fewer than 8 groups), so this isn't a liberal-matching
+        // trade-off — the earlier version was simply wrong.
+        assert!(detect("2026-07-24 14:23:05 INFO server started", &rules).is_empty());
+        assert!(detect("[14:23:05.123] request completed", &rules).is_empty());
+        assert!(detect("timestamp: 09:15:42 UTC", &rules).is_empty());
+        assert!(detect("duration was 00:05:30 total", &rules).is_empty());
+    }
+
+    #[test]
+    fn ipv6_rejects_mac_addresses() {
+        let rules = builtin_rules();
+        // MAC addresses are the closest real-world look-alike: also
+        // colon-separated hex, but always exactly 6 groups (not 8) and
+        // never compressed with "::" — neither branch of the rule
+        // should accept them.
+        assert!(detect("MAC address: 00:1A:2B:3C:4D:5E on the network", &rules).is_empty());
+    }
+
+    #[test]
+    fn openai_api_key_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "key: sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "openai_api_key");
+        // near-miss: legacy bare "sk-" with no documented sub-prefix is
+        // deliberately excluded (see rules.rs comment)
+        assert!(detect("key: sk-4eC39HqLyjWDarjtT1zdp7dcXXXXXXXX used", &rules).is_empty());
+    }
+
+    #[test]
+    fn anthropic_api_key_detects_and_does_not_collide_with_openai_rule() {
+        let rules = builtin_rules();
+        let body = "B".repeat(80);
+        let text = format!("key: sk-ant-api03-{body} used");
+        let f = detect(&text, &rules);
+        // exactly one finding: confirms the openai_api_key rule does NOT
+        // also match this string, which it would if the OpenAI rule
+        // accepted a bare "sk-" prefix instead of requiring a specific
+        // sub-prefix.
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "anthropic_api_key");
+    }
+
+    #[test]
+    fn npm_token_detects_and_rejects() {
+        let rules = builtin_rules();
+        let body = "c".repeat(36);
+        let text = format!("token: npm_{body} used");
+        let f = detect(&text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "npm_token");
+        // near-miss: suffix too short
+        assert!(detect("token: npm_tooshort used", &rules).is_empty());
+    }
+
+    #[test]
+    fn twilio_sid_detects_and_rejects() {
+        let rules = builtin_rules();
+        let f = detect("sid: AC1234567890abcdef1234567890abcdef used", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "twilio_sid");
+        // near-miss: wrong prefix
+        assert!(detect("sid: XX1234567890abcdef1234567890abcdef used", &rules).is_empty());
+    }
+
     // ---------- the hard parts ----------
 
     #[test]

@@ -72,6 +72,188 @@ pub fn builtin_rules() -> Vec<Rule> {
             "AWS Access Key ID",
             r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
         ),
+        // Google Cloud API key: fixed "AIza" prefix + 35 alnum/-/_, 39
+        // chars total. Verified against current Google documentation.
+        // NOTE: Google is mid-transition (as of mid-2026) to a second,
+        // "AQ."-prefixed key format for keys issued via AI Studio: old
+        // AIza keys are being phased out through September 2026. That
+        // new format is not deliberately excluded — the length/charset
+        // wasn't confidently pinned down from public docs at the time
+        // this rule was written, and guessing wrong on a security-tool
+        // pattern seemed worse than a documented gap. Revisit once
+        // Google publishes the format.
+        Rule::new("gcp_api_key", "GCP API Key", r"\bAIza[0-9A-Za-z\-_]{35}\b"),
+        // Google OAuth 2.0 client ID: numeric project prefix + random
+        // string + the long-standing, stable .apps.googleusercontent.com
+        // suffix.
+        Rule::new(
+            "gcp_oauth_client_id",
+            "GCP OAuth Client ID",
+            r"\b\d{6,}-[0-9a-z]{20,}\.apps\.googleusercontent\.com\b",
+        ),
+        // Oracle Cloud Identifier: ocid1.<resource-type>.<realm>.
+        // [region][.future-use].<unique-id>. Region may be empty (two
+        // consecutive dots, as in tenancy OCIDs) — the pattern allows
+        // that rather than requiring a non-empty region segment.
+        Rule::new(
+            "oracle_ocid",
+            "Oracle Cloud Identifier",
+            r"\bocid1\.[a-z0-9]+\.[a-z0-9]+\.[a-z0-9-]*\.[a-z0-9]+\b",
+        ),
+        // Azure Shared Access Signature token: requires BOTH a dated
+        // storage-service-version (sv=) parameter AND a signature
+        // (sig=) parameter co-occurring, non-greedily spanning whatever
+        // other query parameters sit between them. Rust's regex crate
+        // has no lookaround, so this leans on the sv=...sig= ordering
+        // being effectively universal in real SAS tokens (sig is
+        // computed from the other parameters, so it's conventionally
+        // emitted last) rather than asserting it independently of match
+        // position.
+        Rule::new(
+            "azure_sas_token",
+            "Azure SAS Token",
+            r"\bsv=\d{4}-\d{2}-\d{2}[^\s]*?[&?]sig=[A-Za-z0-9%/+=]{20,}",
+        ),
+        // Generic PEM private-key block header. Not brand-specific —
+        // catches leaked keys from AWS, GCP, Oracle, and plain SSH alike
+        // with one rule, since they all share this PEM preamble. Higher
+        // signal-to-noise than most single-provider secret patterns:
+        // AWS Secret Access Keys and Azure Storage Account Keys are
+        // deliberately NOT included as separate rules — both are opaque
+        // base64 blobs with no fixed prefix, and matching "any 40+ char
+        // base64-looking string" would mean constant false positives.
+        Rule::new(
+            "private_key_block",
+            "PEM Private Key Block",
+            r"-----BEGIN (RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----",
+        ),
+        // Stripe secret/publishable/restricted keys: fixed sk_/pk_/rk_
+        // prefix + live/test mode + random suffix. High precision, and
+        // payment-processor keys are about as consequential a thing to
+        // catch as this tool deals with.
+        Rule::new(
+            "stripe_api_key",
+            "Stripe API Key",
+            r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b",
+        ),
+        // DigitalOcean tokens: dop_v1_ (personal access token), doo_v1_
+        // (OAuth flow), or dor_v1_ (OAuth refresh token), each + 64 hex.
+        Rule::new(
+            "digitalocean_token",
+            "DigitalOcean API Token",
+            r"\bdo[opr]_v1_[0-9a-f]{64}\b",
+        ),
+        // SendGrid API key: SG. + two dot-separated segments, ~69 chars
+        // total. Ranges are generous since published lengths vary
+        // slightly (68-70) across sources.
+        Rule::new(
+            "sendgrid_api_key",
+            "SendGrid API Key",
+            r"\bSG\.[A-Za-z0-9_-]{20,24}\.[A-Za-z0-9_-]{40,50}\b",
+        ),
+        // GitHub tokens: classic (ghp_/gho_/ghu_/ghs_/ghr_ + 36 alnum)
+        // and fine-grained (github_pat_ + 80+ alnum/underscore).
+        Rule::new(
+            "github_token",
+            "GitHub Token",
+            r"\b(?:gh[oprsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{80,})\b",
+        ),
+        // Slack tokens: xox[baprs]- + digit/alnum segments. The suffix
+        // length floor is deliberate — a real-world secret-scanner bug
+        // (GitLab) made the suffix optional and ended up matching the
+        // bare literal "xoxb-" with nothing after it.
+        Rule::new(
+            "slack_token",
+            "Slack Token",
+            r"\bxox[baprs]-[0-9a-zA-Z-]{10,}\b",
+        ),
+        // HashiCorp Vault tokens (1.10+): hvs./hvb./hvr. + 24+ alnum,
+        // per the format documented directly by Vault maintainers.
+        Rule::new(
+            "hashicorp_vault_token",
+            "HashiCorp Vault Token",
+            r"\bhv[sbr]\.[A-Za-z0-9]{24,}\b",
+        ),
+        // IPv6 address, full and compressed (::) forms. Three branches,
+        // each covering a structurally distinct, genuinely-valid shape:
+        //   1. full form — exactly 8 groups, no compression
+        //   2. compressed form — leading group(s), a literal "::", then
+        //      optional trailing group(s)
+        //   3. starts with a bare "::"
+        //
+        // This replaced an earlier, more liberal 2-branch version after
+        // testing turned up a real bug, not just a nuisance: a
+        // HH:MM:SS-shaped timestamp like "14:23:05" has 2 colons and
+        // all-digit (= valid hex) groups, so a pattern that just counted
+        // colons matched it as a plausible short IPv6 address. That
+        // shape was never actually valid IPv6 in the first place — an
+        // address without "::" compression must have exactly 8 groups,
+        // full stop, so a 2-3 group address with single colons and no
+        // "::" isn't a permissible shorter form, it's just invalid.
+        // Requiring EITHER the full 8-group form OR an actual literal
+        // "::" fixes this correctly rather than papering over it with a
+        // higher minimum-colon-count heuristic — a real timestamp can
+        // never contain a literal double colon, so this isn't a
+        // precision/recall trade-off, it's excluding a shape that was
+        // always wrong. Verified clean against HH:MM:SS timestamps,
+        // decimal ratios, and MAC addresses (6 colon-separated hex
+        // groups — structurally the closest look-alike).
+        //
+        // No \b boundaries: real addresses routinely start or end with a
+        // colon (::1, 2001:db8::), and \b cannot sit between two
+        // non-word characters — the same limitation already documented
+        // on the us_phone rule above.
+        //
+        // Known, accepted residual trade-off: a single hex-letter/digit
+        // "identifier" immediately followed by :: (e.g. the "d::" in
+        // "std::io") can still false-positive, since a genuine minimal
+        // leading group ("d::1") is structurally identical to that. Not
+        // fixable without lookahead or a validator hook on Rule (see
+        // the open Luhn-validation discussion — same underlying gap).
+        // Left liberal here, consistent with this project's existing
+        // policy of favoring recall over precision on shape-based rules.
+        Rule::new(
+            "ipv6",
+            "IPv6 Address",
+            concat!(
+                r"(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){7}",
+                r"|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?",
+                r"|:(?::[0-9a-fA-F]{1,4}){1,7})",
+            ),
+        ),
+        // OpenAI API key: sk- + a documented modern sub-prefix + random
+        // suffix. Deliberately requires one of the three current
+        // sub-prefixes rather than also accepting bare legacy "sk-" keys
+        // (no sub-prefix at all) — OpenAI is actively phasing those out,
+        // and a bare "sk-" branch would collide with Anthropic's
+        // "sk-ant-..." keys below (both start with "sk-", and without
+        // this restriction the two rules would both match the same
+        // Anthropic key, leaving detect()'s overlap resolution to decide
+        // the label somewhat arbitrarily). No fixed length: OpenAI's key
+        // length has changed at least once recently (one key reported
+        // going from 56 to ~165 total characters between generations),
+        // so a length floor is used instead of an exact count.
+        Rule::new(
+            "openai_api_key",
+            "OpenAI API Key",
+            r"\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}\b",
+        ),
+        // Anthropic API key: sk-ant- + api03 (standard) or oat01 (OAuth)
+        // + ~95-char body. Requiring the generation tag (api03/oat01)
+        // rather than a bare "sk-ant-" keeps this from being any looser
+        // than it needs to be, mirroring the OpenAI rule's discipline.
+        Rule::new(
+            "anthropic_api_key",
+            "Anthropic API Key",
+            r"\bsk-ant-(?:api03|oat01)-[A-Za-z0-9_-]{60,}\b",
+        ),
+        Rule::new("npm_token", "npm Access Token", r"\bnpm_[A-Za-z0-9]{36}\b"),
+        // Twilio Account SID / API Key SID: AC/SK + 32 hex. Lower
+        // confidence than the other rules here — a 2-character prefix is
+        // less distinctive than the 4+ character prefixes everything
+        // else in this file uses, so it has a slightly higher chance of
+        // colliding with unrelated hex-looking identifiers.
+        Rule::new("twilio_sid", "Twilio SID", r"\b(?:AC|SK)[0-9a-fA-F]{32}\b"),
     ]
 }
 
@@ -235,7 +417,7 @@ pattern = '\b[a-z.]+@corp\.example\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 5, "override must replace, not add");
+        assert_eq!(merged.len(), 21, "override must replace, not add");
         let email = merged.iter().find(|r| r.id == "email").expect("email rule");
         assert_eq!(email.name, "Corp Email Only");
         assert!(!email.pattern.is_match("bob@gmail.com"));
@@ -255,6 +437,6 @@ pattern = '\bBDG-\d{6}\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 6);
+        assert_eq!(merged.len(), 22);
     }
 }

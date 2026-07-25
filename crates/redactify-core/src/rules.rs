@@ -82,11 +82,7 @@ pub fn builtin_rules() -> Vec<Rule> {
         // this rule was written, and guessing wrong on a security-tool
         // pattern seemed worse than a documented gap. Revisit once
         // Google publishes the format.
-        Rule::new(
-            "gcp_api_key",
-            "GCP API Key",
-            r"\bAIza[0-9A-Za-z\-_]{35}\b",
-        ),
+        Rule::new("gcp_api_key", "GCP API Key", r"\bAIza[0-9A-Za-z\-_]{35}\b"),
         // Google OAuth 2.0 client ID: numeric project prefix + random
         // string + the long-standing, stable .apps.googleusercontent.com
         // suffix.
@@ -257,11 +253,7 @@ pub fn builtin_rules() -> Vec<Rule> {
         // less distinctive than the 4+ character prefixes everything
         // else in this file uses, so it has a slightly higher chance of
         // colliding with unrelated hex-looking identifiers.
-        Rule::new(
-            "twilio_sid",
-            "Twilio SID",
-            r"\b(?:AC|SK)[0-9a-fA-F]{32}\b",
-        ),
+        Rule::new("twilio_sid", "Twilio SID", r"\b(?:AC|SK)[0-9a-fA-F]{32}\b"),
     ]
 }
 

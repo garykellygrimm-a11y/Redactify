@@ -137,11 +137,7 @@ mod tests {
         assert_eq!(f[0].rule_id, "gcp_api_key");
         assert_eq!(f[0].matched, "AIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123");
         // near-miss: wrong prefix
-        assert!(detect(
-            "key: BIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123 saved",
-            &rules
-        )
-        .is_empty());
+        assert!(detect("key: BIzaSyABCDEFGHIJKLMNOPQRSTUVWXYZabcd123 saved", &rules).is_empty());
     }
 
     #[test]
@@ -153,11 +149,13 @@ mod tests {
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].rule_id, "gcp_oauth_client_id");
         // near-miss: right shape, wrong domain
-        assert!(detect(
-            "client_id=123456789012-abc123def456ghi789jkl012mno345.apps.example.com",
-            &rules
-        )
-        .is_empty());
+        assert!(
+            detect(
+                "client_id=123456789012-abc123def456ghi789jkl012mno345.apps.example.com",
+                &rules
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -195,11 +193,13 @@ mod tests {
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].rule_id, "azure_sas_token");
         // near-miss: version present, but no signature parameter at all
-        assert!(detect(
-            "token: sv=2015-04-05&st=2015-04-29T22:18:26Z with no signature",
-            &rules
-        )
-        .is_empty());
+        assert!(
+            detect(
+                "token: sv=2015-04-05&st=2015-04-29T22:18:26Z with no signature",
+                &rules
+            )
+            .is_empty()
+        );
     }
 
     #[test]
@@ -225,7 +225,8 @@ mod tests {
     #[test]
     fn digitalocean_token_detects_and_rejects() {
         let rules = builtin_rules();
-        let text = "token: dop_v1_60b49e2a8032f922d2001ea8a7b6c8ca63aefb197c3a0b83d0f588cfa8de1c8c used";
+        let text =
+            "token: dop_v1_60b49e2a8032f922d2001ea8a7b6c8ca63aefb197c3a0b83d0f588cfa8de1c8c used";
         let f = detect(text, &rules);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].rule_id, "digitalocean_token");
@@ -248,7 +249,10 @@ mod tests {
     #[test]
     fn github_token_detects_and_rejects() {
         let rules = builtin_rules();
-        let f = detect("token: ghp_16C7e42F292c6912E7710c838347Ae178B4a used", &rules);
+        let f = detect(
+            "token: ghp_16C7e42F292c6912E7710c838347Ae178B4a used",
+            &rules,
+        );
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].rule_id, "github_token");
         // near-miss: suffix too short for either classic or fine-grained shape
@@ -373,18 +377,11 @@ mod tests {
     #[test]
     fn twilio_sid_detects_and_rejects() {
         let rules = builtin_rules();
-        let f = detect(
-            "sid: AC1234567890abcdef1234567890abcdef used",
-            &rules,
-        );
+        let f = detect("sid: AC1234567890abcdef1234567890abcdef used", &rules);
         assert_eq!(f.len(), 1);
         assert_eq!(f[0].rule_id, "twilio_sid");
         // near-miss: wrong prefix
-        assert!(detect(
-            "sid: XX1234567890abcdef1234567890abcdef used",
-            &rules
-        )
-        .is_empty());
+        assert!(detect("sid: XX1234567890abcdef1234567890abcdef used", &rules).is_empty());
     }
 
     // ---------- the hard parts ----------

@@ -70,6 +70,8 @@ in under 200 ms.
 | `Ctrl+Z` | Undo the last decision (repeat to walk back) |
 | `Ctrl+F` | Search the document |
 | `Ctrl+D` | Toggle before/after output preview |
+| `Ctrl+S` | Save (reuses the last export destination this session) |
+| `Ctrl+E` | Export (always asks where to save) |
 | `Ctrl+O` / `Ctrl+L` / `Ctrl+W` | Open file / load rules / close document |
 
 Accepted findings render in place as `[REDACTED:rule]` tokens, so the
@@ -108,7 +110,13 @@ finding `accepted` — truthfully, since no human review occurred.
 
 ## Detection rules
 
-Five builtin rules: email, IPv4, US SSN, US phone, AWS access key ID.
+Twenty-one builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
+key ID, GCP API key, GCP OAuth client ID, Oracle Cloud Identifier (OCID),
+Azure SAS token, a generic PEM private-key block (covers leaked keys from
+AWS, GCP, Oracle, and plain SSH with one rule), Stripe API key,
+DigitalOcean API token, SendGrid API key, GitHub token (classic and
+fine-grained), Slack token, HashiCorp Vault token, OpenAI API key,
+Anthropic API key, npm access token, and Twilio SID.
 Add your own in TOML (`--rules` in the CLI, File → Load Rules in the
 app; same-id rules override builtins):
 

@@ -17,10 +17,10 @@ pub fn detect(text: &str, rules: &[Rule]) -> Vec<Finding> {
         for m in rule.pattern.find_iter(text) {
             // Only runs on strings the regex already matched — cost is
             // proportional to candidate count, not document size.
-            if let Some(validate) = rule.validator {
-                if !validate(m.as_str()) {
-                    continue;
-                }
+            if let Some(validate) = rule.validator
+                && !validate(m.as_str())
+            {
+                continue;
             }
             findings.push(Finding {
                 start: m.start(),

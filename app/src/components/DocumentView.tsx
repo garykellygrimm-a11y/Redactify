@@ -9,7 +9,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TEXT_SIZE_METRICS, type TextSize } from "../textSize";
 import type { ScanOutcome } from "../App";
-import type { Review } from "../review";
+import { tally, type Review } from "../review";
 
 export type ViewMode = "before" | "after";
 
@@ -212,13 +212,54 @@ export const DocumentView = memo(
 
       if (mode === "after") {
         return segments.map((seg, j) => {
-          const isAccepted =
-            seg.finding !== null && review.states[seg.finding] === "accepted";
-          return isAccepted ? (
-            <span key={j} className="text-muted">
-              [REDACTED:{oc.findings[seg.finding!].rule_id}]
-            </span>
-          ) : (
+          if (seg.finding === null)
+            return (
+              <span key={j}>
+                {highlightQuery(seg.text, searchQuery, `${i}-${j}`)}
+              </span>
+            );
+
+          const idx = seg.finding;
+          const state = review.states[idx];
+
+          if (state === "accepted") {
+            return (
+              <span key={j} className="text-muted">
+                [REDACTED:{oc.findings[idx].rule_id}]
+              </span>
+            );
+          }
+
+          if (state === "pending") {
+            // Deliberately distinct from rejected — a rejected finding is
+            // a reviewer's final decision to leave it visible; a pending
+            // one is visible only because it hasn't been decided yet, and
+            // that's a meaningfully different thing to see in an output
+            // preview. Same underline-by-rule language as before mode's
+            // pending marks, so the two views share one visual vocabulary
+            // instead of each inventing its own.
+            const hue = ruleHue(oc.findings[idx].rule_id, ruleIds);
+            return (
+              <mark
+                key={j}
+                className="rounded-sm bg-pending-soft px-0.5 text-text"
+                style={{
+                  textDecorationLine: "underline",
+                  textDecorationStyle: RULE_UNDERLINE_STYLES[hue - 1],
+                  textDecorationColor: `var(--rule-${hue})`,
+                  textDecorationThickness: "2px",
+                  textUnderlineOffset: "3px",
+                }}
+                title={`pending · will NOT be redacted unless accepted · ${oc.findings[idx].rule_id}`}
+              >
+                {seg.text}
+              </mark>
+            );
+          }
+
+          // rejected: plain — this is the reviewer's actual decision, not
+          // an oversight, so it shouldn't visually compete with pending.
+          return (
             <span key={j}>
               {highlightQuery(seg.text, searchQuery, `${i}-${j}`)}
             </span>
@@ -297,12 +338,23 @@ export const DocumentView = memo(
           lineHeight: "var(--doc-row-height)",
         }}
       >
-        {mode === "after" && (
-          <div className="sticky top-0 z-[1] border-b border-border bg-surface-raised px-4 py-1 text-xs text-muted">
-            Preview: output as it would export now · pending findings are NOT
-            redacted until accepted
-          </div>
-        )}
+        {mode === "after" &&
+          (() => {
+            const { pending } = tally(review);
+            return (
+              <div
+                className={`sticky top-0 z-[1] border-b border-border px-4 py-1 text-xs ${
+                  pending > 0
+                    ? "bg-pending-soft font-medium text-pending"
+                    : "bg-surface-raised text-muted"
+                }`}
+              >
+                {pending > 0
+                  ? `Preview: ${pending} pending finding${pending === 1 ? "" : "s"} will NOT be redacted until accepted`
+                  : "Preview: output as it would export now"}
+              </div>
+            );
+          })()}
         <div
           style={{
             position: "relative",

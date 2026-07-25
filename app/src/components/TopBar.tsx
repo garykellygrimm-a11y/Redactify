@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toggleTheme } from "../theme";
 import type { TextSize } from "../textSize";
+import type { ViewMode } from "./DocumentView";
 import type { RulesInfo } from "../App";
 
 interface Props {
@@ -8,6 +9,9 @@ interface Props {
   textSize: TextSize;
   onChangeTextSize: (direction: 1 | -1) => void;
   onOpenHelp: () => void;
+  hasDocument: boolean;
+  viewMode: ViewMode;
+  onSetViewMode: (mode: ViewMode) => void;
 }
 
 const SIZE_LABEL: Record<TextSize, string> = {
@@ -21,6 +25,9 @@ export function TopBar({
   textSize,
   onChangeTextSize,
   onOpenHelp,
+  hasDocument,
+  viewMode,
+  onSetViewMode,
 }: Props) {
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme ?? "light",
@@ -43,6 +50,32 @@ export function TopBar({
         </span>
       )}
       <div className="ml-auto flex items-center gap-2">
+        {hasDocument && (
+          <div className="flex items-center overflow-hidden rounded-md border border-border">
+            <button
+              onClick={() => onSetViewMode("before")}
+              className={`px-2.5 py-1 text-xs ${
+                viewMode === "before"
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-surface-sunken"
+              }`}
+              title="Original document with inline review markup"
+            >
+              Before
+            </button>
+            <button
+              onClick={() => onSetViewMode("after")}
+              className={`border-l border-border px-2.5 py-1 text-xs ${
+                viewMode === "after"
+                  ? "bg-accent-soft text-accent"
+                  : "text-muted hover:bg-surface-sunken"
+              }`}
+              title="Preview output as it would export now (Ctrl+D)"
+            >
+              After
+            </button>
+          </div>
+        )}
         <div className="flex items-center overflow-hidden rounded-md border border-border">
           <button
             onClick={() => onChangeTextSize(-1)}

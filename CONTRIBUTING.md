@@ -63,6 +63,11 @@ Branches are checked in CI against `type/slug`, lowercase, hyphen-separated:
 
 Example: `feature/rule-editor`, `fix/overlap-resolution-tie-break`.
 
+Automated branches are exempt: `release-please--*` (release-please's
+Release PRs) and `dependabot/**` (dependency updates) don't follow
+`type/slug` — neither tool supports customizing its branch-naming scheme,
+so the naming check excludes them by pattern instead.
+
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):

@@ -522,6 +522,9 @@ function App() {
         textSize={textSize}
         onChangeTextSize={changeTextSize}
         onOpenHelp={() => setHelpOpen(true)}
+        hasDocument={!!outcome}
+        viewMode={viewMode}
+        onSetViewMode={setViewMode}
       />
       {error && (
         <div className="border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending">

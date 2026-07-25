@@ -18,26 +18,7 @@
   "packages": {
     "app/src-tauri": {
       "release-type": "rust",
-      "component": "",
-      "changelog-path": "CHANGELOG.md",
-      "skip-github-release": true,
-      "extra-files": [
-        {
-          "type": "toml",
-          "path": "crates/redactify-core/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "toml",
-          "path": "crates/redactify-cli/Cargo.toml",
-          "jsonpath": "$.package.version"
-        },
-        {
-          "type": "json",
-          "path": "app/package.json",
-          "jsonpath": "$.version"
-        }
-      ]
+      "component": ""
     }
   }
 }

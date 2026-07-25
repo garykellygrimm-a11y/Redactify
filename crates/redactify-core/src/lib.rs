@@ -15,6 +15,13 @@ pub fn detect(text: &str, rules: &[Rule]) -> Vec<Finding> {
 
     for rule in rules {
         for m in rule.pattern.find_iter(text) {
+            // Only runs on strings the regex already matched — cost is
+            // proportional to candidate count, not document size.
+            if let Some(validate) = rule.validator {
+                if !validate(m.as_str()) {
+                    continue;
+                }
+            }
             findings.push(Finding {
                 start: m.start(),
                 end: m.end(),
@@ -382,6 +389,35 @@ mod tests {
         assert_eq!(f[0].rule_id, "twilio_sid");
         // near-miss: wrong prefix
         assert!(detect("sid: XX1234567890abcdef1234567890abcdef used", &rules).is_empty());
+    }
+
+    #[test]
+    fn credit_card_validates_via_luhn_not_shape_alone() {
+        let rules = builtin_rules();
+        // Standard, publicly-documented test numbers (Visa/Mastercard/Amex
+        // test values used throughout the payments industry) — not real
+        // cards. All three lengths (16/16/15 digits) confirm the rule
+        // isn't hardcoded to one card length.
+        let f = detect("card: 4111111111111111 on file", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "credit_card");
+
+        assert_eq!(
+            detect("mastercard 5500005555555559 charged", &rules).len(),
+            1
+        );
+        assert_eq!(detect("amex: 378282246310005 stored", &rules).len(), 1);
+
+        // Grouped with separators — the regex is deliberately liberal
+        // about this, since Luhn (not the shape) does the real filtering.
+        let grouped = detect("card: 4111-1111-1111-1111 on file", &rules);
+        assert_eq!(grouped.len(), 1);
+        assert_eq!(grouped[0].matched, "4111-1111-1111-1111");
+
+        // near-miss: same length and digit-run shape as a real card, but
+        // fails the Luhn checksum — this is the whole point of adding a
+        // validator instead of matching any 16-digit run.
+        assert!(detect("order number 1234567890123456 today", &rules).is_empty());
     }
 
     // ---------- the hard parts ----------

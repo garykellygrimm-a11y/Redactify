@@ -24,6 +24,17 @@ pub struct Rule {
     /// Compiled regex. Note: Rust's `regex` crate has NO lookahead/lookbehind,
     /// so all patterns lean on `\b` word boundaries instead.
     pub pattern: Regex,
+    /// Optional post-match check: given the matched text, does it actually
+    /// look like a real instance of what this rule targets, beyond just
+    /// matching the shape? Exists for the small set of rules where a real
+    /// checksum (e.g. Luhn for card numbers) can cheaply rule out most
+    /// false positives that a shape-only regex can't distinguish — it
+    /// only ever runs on strings the regex already matched, so the cost
+    /// is proportional to candidate count, not document size. Builtins
+    /// only: a Rust function pointer can't be expressed in a TOML rules
+    /// file, so user-defined rules always get `None` here (see
+    /// `parse_rules` below).
+    pub validator: Option<fn(&str) -> bool>,
 }
 
 impl Rule {
@@ -35,6 +46,20 @@ impl Rule {
             id: id.to_string(),
             name: name.to_string(),
             pattern: Regex::new(pattern).expect("builtin pattern must compile"),
+            validator: None,
+        }
+    }
+
+    /// Like `new`, but with a post-match validator attached. Use sparingly
+    /// — only when the regex alone would be too liberal to be useful (a
+    /// bare 13-19 digit run matches constantly) and a real checksum
+    /// exists to narrow it down.
+    fn with_validator(id: &str, name: &str, pattern: &str, validator: fn(&str) -> bool) -> Rule {
+        Rule {
+            id: id.to_string(),
+            name: name.to_string(),
+            pattern: Regex::new(pattern).expect("builtin pattern must compile"),
+            validator: Some(validator),
         }
     }
 }
@@ -254,7 +279,50 @@ pub fn builtin_rules() -> Vec<Rule> {
         // else in this file uses, so it has a slightly higher chance of
         // colliding with unrelated hex-looking identifiers.
         Rule::new("twilio_sid", "Twilio SID", r"\b(?:AC|SK)[0-9a-fA-F]{32}\b"),
+        // Credit/debit card number: a bare 13-19 digit run (with optional
+        // single space/hyphen separators between digits) matches
+        // constantly on its own — order numbers, invoice IDs, phone
+        // sequences. Luhn is the actual signal here, not the regex; the
+        // pattern is intentionally liberal about grouping/separators
+        // since the checksum is what does the real work of ruling out
+        // non-card numbers.
+        Rule::with_validator(
+            "credit_card",
+            "Credit/Debit Card Number",
+            r"\b\d(?:[ -]?\d){12,18}\b",
+            luhn_valid,
+        ),
     ]
+}
+
+/// Luhn checksum — the standard validity check for payment card numbers.
+/// Strips non-digit separators first (real numbers are often written
+/// grouped with spaces or hyphens), then sums digits from the right,
+/// doubling every second one and subtracting 9 from any result over 9.
+/// A valid number's total is divisible by 10.
+fn luhn_valid(matched: &str) -> bool {
+    let digits: Vec<u32> = matched
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .filter_map(|c| c.to_digit(10))
+        .collect();
+    if digits.len() < 13 || digits.len() > 19 {
+        return false;
+    }
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(i, &d)| {
+            if i % 2 == 1 {
+                let doubled = d * 2;
+                if doubled > 9 { doubled - 9 } else { doubled }
+            } else {
+                d
+            }
+        })
+        .sum();
+    sum % 10 == 0
 }
 
 // ---------------------------------------------------------------------------
@@ -311,6 +379,10 @@ fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyErro
             id: spec.id,
             name: spec.name,
             pattern,
+            // A Rust function pointer can't be expressed in a TOML rules
+            // file — user-defined rules are shape-only, same as before
+            // this field existed.
+            validator: None,
         });
     }
 
@@ -417,7 +489,7 @@ pattern = '\b[a-z.]+@corp\.example\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 21, "override must replace, not add");
+        assert_eq!(merged.len(), 22, "override must replace, not add");
         let email = merged.iter().find(|r| r.id == "email").expect("email rule");
         assert_eq!(email.name, "Corp Email Only");
         assert!(!email.pattern.is_match("bob@gmail.com"));
@@ -437,6 +509,6 @@ pattern = '\bBDG-\d{6}\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 22);
+        assert_eq!(merged.len(), 23);
     }
 }

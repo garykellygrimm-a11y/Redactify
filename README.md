@@ -110,13 +110,15 @@ finding `accepted` — truthfully, since no human review occurred.
 
 ## Detection rules
 
-Twenty-one builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
+Twenty-two builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
 key ID, GCP API key, GCP OAuth client ID, Oracle Cloud Identifier (OCID),
 Azure SAS token, a generic PEM private-key block (covers leaked keys from
 AWS, GCP, Oracle, and plain SSH with one rule), Stripe API key,
 DigitalOcean API token, SendGrid API key, GitHub token (classic and
 fine-grained), Slack token, HashiCorp Vault token, OpenAI API key,
-Anthropic API key, npm access token, and Twilio SID.
+Anthropic API key, npm access token, Twilio SID, and credit/debit card
+number (Luhn-validated — the one rule with a real checksum behind it,
+not shape-matching alone).
 Add your own in TOML (`--rules` in the CLI, File → Load Rules in the
 app; same-id rules override builtins):
 

@@ -12,7 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Verify Regex Match
+        if: |
+          !startsWith(github.ref_name, 'release-please--') &&
+          !startsWith(github.ref_name, 'dependabot/')
         uses: deepakputhraya/action-branch-name@master
         with:
-          regex: '^(feature|feat|bugfix|bug|hotfix|fix|refactor|chore|docs)\/[a-z0-9-]+$'
+          regex: '^(feature|feat|bugfix|bug|hotfix|fix|refactor|chore|docs|ci)\/[a-z0-9-]+$'
           ignore: main

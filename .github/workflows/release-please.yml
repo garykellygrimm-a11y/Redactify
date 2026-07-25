@@ -1,0 +1,23 @@
+name: release-please
+
+# Runs on every push to main. release-please itself decides whether
+# there's anything releasable (feat/fix/deps commits, or a BREAKING
+# CHANGE footer) since the last release — most pushes result in no
+# change here, it just keeps the standing Release PR up to date.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

@@ -18,22 +18,23 @@
   "packages": {
     "app/src-tauri": {
       "release-type": "rust",
-      "changelog-path": "../../CHANGELOG.md",
+      "component": "",
+      "changelog-path": "CHANGELOG.md",
       "skip-github-release": true,
       "extra-files": [
         {
           "type": "toml",
-          "path": "../../crates/redactify-core/Cargo.toml",
+          "path": "crates/redactify-core/Cargo.toml",
           "jsonpath": "$.package.version"
         },
         {
           "type": "toml",
-          "path": "../../crates/redactify-cli/Cargo.toml",
+          "path": "crates/redactify-cli/Cargo.toml",
           "jsonpath": "$.package.version"
         },
         {
           "type": "json",
-          "path": "../package.json",
+          "path": "app/package.json",
           "jsonpath": "$.version"
         }
       ]

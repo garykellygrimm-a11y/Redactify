@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-25
+
+### Added
+
+- Virtualized document rendering — files with tens of thousands of lines
+  now scan and scroll smoothly, since only the visible rows are ever
+  mounted
+- Recent Files menu (File > Open Recent), capped at 5 entries, with
+  self-healing for files that have moved or been deleted
+- Adjustable text size, visible keyboard-focus indicators, reduced-motion
+  support, and a keyboard shortcuts help panel (`?` or the toolbar button)
+- Save (`Ctrl+S`, reuses the last export destination) alongside the
+  existing Export (`Ctrl+E`, always prompts)
+- A visible Before/After toggle in the toolbar; pending findings are now
+  visually distinct from rejected ones in the After preview, and the
+  preview banner shows a live pending-findings count
+- 17 new detection rules — GCP API key & OAuth client ID, Oracle Cloud
+  Identifier, Azure SAS token, a generic PEM private-key block, Stripe,
+  DigitalOcean, SendGrid, GitHub, Slack, HashiCorp Vault, IPv6, OpenAI,
+  Anthropic, npm, and Twilio — plus a Luhn-validated credit/debit card
+  rule. 22 builtin rules in total, up from 5
+- Automated version bumps and changelog generation via release-please
+
+### Changed
+
+- Undo moved from `u` to the more universally recognized `Ctrl+Z`;
+  `j`/`k` removed in favor of arrow-key-only navigation; whole-rule
+  accept/reject is now labeled `Shift+A` / `Shift+R`
+
+### Fixed
+
+- Theme preference is now actually applied on launch — it was previously
+  computed but never used, so the app silently reset to light every time
+  regardless of the saved preference
+
 ## [0.4.4] - 2026-07-22
 
 First public release — downloadable installers and binaries.

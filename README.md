@@ -215,6 +215,16 @@ Planned:
   authored in the app is trapped there.
 - ⬜ **v0.8 — Signed and self-updating.** Code-signed builds, in-app updates,
   and distribution through winget and Homebrew.
+- ⬜ **v0.9 — Multiple open files.** Working on more than one document at
+  once — tabs, or something like them; the exact UI shape is still open.
+  A real architectural shift, not an incremental add: `outcome`, `review`,
+  `viewMode`, and the remembered export path all move from single values
+  to one instance per open document, plus real decisions about what Close
+  Document, Recent Files, and Save/Export mean once more than one file is
+  open at a time.
+- ⬜ **v0.10 — Documents.** PDF and DOCX support, with redaction that
+  removes content rather than drawing rectangles over it — the failure
+  mode that leaks names out of "redacted" filings with some regularity.
 - ⬜ **v1.0 — Complete and tested.** A real completeness bar, not a feature
   list: correctness checked against a broader corpus of realistic
   documents, not just per-rule tests; the cross-platform installers
@@ -224,9 +234,6 @@ Planned:
   very large files, permission errors on export, malformed custom rules;
   and documentation that matches what's actually shipped. Signed builds
   carry over from v0.8.
-- ⬜ **v1.1 — Documents.** PDF and DOCX support, with redaction that removes
-  content rather than drawing rectangles over it — the failure mode that
-  leaks names out of "redacted" filings with some regularity.
 
 ## A note from the author
 

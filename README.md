@@ -154,7 +154,7 @@ the process still exits non-zero if anything failed, so a script checking
 
 ## Detection rules
 
-Twenty-six builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
+Thirty builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
 key ID, GCP API key, GCP OAuth client ID, Oracle Cloud Identifier (OCID),
 Azure SAS token, a generic PEM private-key block (covers leaked keys from
 AWS, GCP, Oracle, and plain SSH with one rule), Stripe API key,
@@ -163,7 +163,10 @@ fine-grained), Slack token, HashiCorp Vault token, OpenAI API key,
 Anthropic API key, npm access token, Twilio SID, credit/debit card number
 (Luhn-validated), JSON Web Token (shape plus a real header-decode check,
 not shape-matching alone), Bitcoin address (Base58Check-validated),
-Discord webhook URL, and Mailchimp API key.
+Discord webhook URL, Mailchimp API key, IBAN (mod-97 validated), US bank
+routing number (weighted-checksum validated), Canadian Social Insurance
+Number (Luhn-validated), and a database connection string rule that
+flags only the embedded credential, not the whole connection string.
 Add your own in TOML (`--rules` in the CLI, File → Load Rules in the
 app; same-id rules override builtins):
 

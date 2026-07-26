@@ -38,6 +38,15 @@ pub struct Rule {
     /// file, so user-defined rules always get `None` here (see
     /// `parse_rules` below).
     pub validator: Option<fn(&str) -> bool>,
+    /// If set, only this capture group's span becomes the finding — not
+    /// the whole match. Lets a rule require surrounding context for
+    /// precision (e.g. requiring a full `scheme://user:PASSWORD@host`
+    /// shape) while only flagging/redacting the actual secret portion
+    /// within it. `None` (the default every existing rule uses) means
+    /// "the whole match is the finding," unchanged from before this
+    /// field existed. Builtins only, same reasoning as `validator`: a
+    /// TOML rules file has no way to express "use group N."
+    pub finding_group: Option<usize>,
 }
 
 impl Rule {
@@ -50,6 +59,7 @@ impl Rule {
             name: name.to_string(),
             pattern: Regex::new(pattern).expect("builtin pattern must compile"),
             validator: None,
+            finding_group: None,
         }
     }
 
@@ -63,6 +73,22 @@ impl Rule {
             name: name.to_string(),
             pattern: Regex::new(pattern).expect("builtin pattern must compile"),
             validator: Some(validator),
+            finding_group: None,
+        }
+    }
+
+    /// Like `new`, but only capture group `group` becomes the finding,
+    /// not the whole match. Use when precision genuinely requires
+    /// context the finding itself shouldn't include — e.g. matching a
+    /// full `scheme://user:PASSWORD@host` connection string for
+    /// specificity, while only flagging/redacting the password.
+    fn with_group(id: &str, name: &str, pattern: &str, group: usize) -> Rule {
+        Rule {
+            id: id.to_string(),
+            name: name.to_string(),
+            pattern: Regex::new(pattern).expect("builtin pattern must compile"),
+            validator: None,
+            finding_group: Some(group),
         }
     }
 }
@@ -346,14 +372,78 @@ pub fn builtin_rules() -> Vec<Rule> {
             "Mailchimp API Key",
             r"\b[0-9a-f]{32}-[a-z]{2}\d{1,2}\b",
         ),
+        // IBAN: 2-letter country + 2 check digits + up to 30 alnum BBAN
+        // characters, validated via ISO 7064 MOD 97-10 (move the first
+        // 4 chars to the end, letters -> numbers A=10..Z=35, the result
+        // interpreted as one big integer must be ≡ 1 mod 97). Verified
+        // against a well-known example IBAN used throughout ISO/banking
+        // documentation (GB82 WEST...), not constructed test data.
+        Rule::with_validator(
+            "iban",
+            "IBAN",
+            r"\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]){11,30}\b",
+            iban_is_valid,
+        ),
+        // US bank routing number (ABA): 9 digits, weighted mod-10
+        // checksum (3-7-1 repeating). Verified against a real, public
+        // routing number — these identify banks, not individual
+        // accounts, so there's no privacy concern using a real one, the
+        // same way a company's public IP address isn't sensitive.
+        Rule::with_validator(
+            "us_routing_number",
+            "US Bank Routing Number",
+            r"\b\d{9}\b",
+            us_routing_number_is_valid,
+        ),
+        // Canadian SIN: 9 digits, Luhn — the exact same checksum
+        // credit_card uses, but through its own validator rather than
+        // calling luhn_valid directly, since that function's length
+        // bound (13-19, correct for card numbers) would reject every
+        // 9-digit SIN outright before the checksum was ever checked.
+        Rule::with_validator(
+            "canadian_sin",
+            "Canadian Social Insurance Number",
+            r"\b\d{9}\b",
+            canadian_sin_is_valid,
+        ),
+        // Database connection string: matches the full scheme://user:
+        // password@host shape for precision (a bare password alone has
+        // no distinguishing context at all), but finding_group narrows
+        // the actual finding to just the captured group — the first
+        // builtin to use that mechanism. Username is optional (`*`, not
+        // `+`) specifically for Redis's common `redis://:password@host`
+        // convention, which has no username at all — an earlier draft
+        // required at least one username character and silently missed
+        // every password-only Redis URL.
+        //
+        // The captured group includes the LEADING COLON (":password",
+        // not just "password") for a real reason, not style: the
+        // existing email rule also matches "password@host" whenever the
+        // host looks domain-shaped, which is most of the time. Both
+        // rules' findings would then start at the same position, and
+        // overlap resolution keeps the longer one — email's, since it
+        // includes the whole domain — meaning db_connection_string
+        // would be silently shadowed and never actually appear for a
+        // realistic connection string. Verified this happens with the
+        // colon excluded; including it shifts this rule's start one
+        // character earlier than email's independent match, which wins
+        // outright on "earliest start" rather than needing the tie-break
+        // at all. The redacted token absorbs the colon along with the
+        // password, which is a minor, acceptable cosmetic cost for a
+        // rule that would otherwise never fire in practice.
+        Rule::with_group(
+            "db_connection_string",
+            "Database Connection String Credential",
+            r"(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^:@\s/]*(:[^@\s]+)@[^\s/]+",
+            1,
+        ),
     ]
 }
 
 /// Luhn checksum — the standard validity check for payment card numbers.
 /// Strips non-digit separators first (real numbers are often written
-/// grouped with spaces or hyphens), then sums digits from the right,
-/// doubling every second one and subtracting 9 from any result over 9.
-/// A valid number's total is divisible by 10.
+/// grouped with spaces or hyphens), then requires a real card-shaped
+/// length (13-19 digits) before checking the checksum itself.
 fn luhn_valid(matched: &str) -> bool {
     let digits: Vec<u32> = matched
         .chars()
@@ -363,6 +453,10 @@ fn luhn_valid(matched: &str) -> bool {
     if digits.len() < 13 || digits.len() > 19 {
         return false;
     }
+    luhn_checksum_valid(&digits)
+}
+
+fn luhn_checksum_valid(digits: &[u32]) -> bool {
     let sum: u32 = digits
         .iter()
         .rev()
@@ -377,6 +471,21 @@ fn luhn_valid(matched: &str) -> bool {
         })
         .sum();
     sum.is_multiple_of(10)
+}
+
+/// Canadian SIN: exactly 9 digits, same Luhn algorithm as credit cards —
+/// just its own, correct length requirement instead of borrowing
+/// `luhn_valid`'s card-shaped 13-19 bound.
+fn canadian_sin_is_valid(matched: &str) -> bool {
+    let digits: Vec<u32> = matched
+        .chars()
+        .filter(|c| c.is_ascii_digit())
+        .filter_map(|c| c.to_digit(10))
+        .collect();
+    if digits.len() != 9 {
+        return false;
+    }
+    luhn_checksum_valid(&digits)
 }
 
 /// Decode the JWT's header segment and confirm it's valid JSON containing
@@ -408,6 +517,66 @@ fn bitcoin_address_is_valid(matched: &str) -> bool {
     let first_hash = Sha256::digest(payload);
     let second_hash = Sha256::digest(first_hash);
     &second_hash[..4] == checksum
+}
+
+/// ISO 7064 MOD 97-10: strip spaces, move the first 4 characters
+/// (country code + check digits) to the end, convert letters to numbers
+/// (A=10..Z=35), and check that the resulting decimal number ≡ 1 (mod 97).
+/// Implemented digit-by-digit (the standard way to do this check without
+/// needing bignum support) rather than parsing the whole rearranged
+/// string into one integer, since IBANs can be up to 34 characters —
+/// comfortably larger than fits in a u64 once every letter has expanded
+/// to two digits.
+fn iban_is_valid(matched: &str) -> bool {
+    let cleaned: String = matched.chars().filter(|c| !c.is_whitespace()).collect();
+    if cleaned.len() < 15 || cleaned.len() > 34 {
+        return false;
+    }
+    let chars: Vec<char> = cleaned.chars().collect();
+    if !chars[0].is_ascii_uppercase() || !chars[1].is_ascii_uppercase() {
+        return false;
+    }
+    if !chars[2].is_ascii_digit() || !chars[3].is_ascii_digit() {
+        return false;
+    }
+
+    let rearranged = chars[4..].iter().chain(chars[0..4].iter());
+
+    let mut remainder: u32 = 0;
+    for &ch in rearranged {
+        let value: u32 = if ch.is_ascii_digit() {
+            ch.to_digit(10).unwrap()
+        } else if ch.is_ascii_uppercase() {
+            (ch as u32) - ('A' as u32) + 10
+        } else {
+            return false;
+        };
+        // Feed the value's digit(s) into the running remainder one
+        // decimal digit at a time -- (remainder * 10 + digit) % 97 at
+        // each step is equivalent to computing the mod of the whole
+        // number, without ever needing more than a u32.
+        if value >= 10 {
+            remainder = (remainder * 10 + value / 10) % 97;
+            remainder = (remainder * 10 + value % 10) % 97;
+        } else {
+            remainder = (remainder * 10 + value) % 97;
+        }
+    }
+    remainder == 1
+}
+
+/// US bank routing number (ABA) checksum: 9 digits, weighted 3-7-1
+/// repeating across the three groups of three, summed and checked for
+/// divisibility by 10.
+fn us_routing_number_is_valid(matched: &str) -> bool {
+    let digits: Vec<u32> = matched.chars().filter_map(|c| c.to_digit(10)).collect();
+    if digits.len() != 9 {
+        return false;
+    }
+    let checksum = 3 * (digits[0] + digits[3] + digits[6])
+        + 7 * (digits[1] + digits[4] + digits[7])
+        + (digits[2] + digits[5] + digits[8]);
+    checksum.is_multiple_of(10)
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +637,9 @@ fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyErro
             // file — user-defined rules are shape-only, same as before
             // this field existed.
             validator: None,
+            // Same story: no way to express "use capture group N" in
+            // TOML either, so user rules are always whole-match.
+            finding_group: None,
         });
     }
 
@@ -574,7 +746,7 @@ pattern = '\b[a-z.]+@corp\.example\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 26, "override must replace, not add");
+        assert_eq!(merged.len(), 30, "override must replace, not add");
         let email = merged.iter().find(|r| r.id == "email").expect("email rule");
         assert_eq!(email.name, "Corp Email Only");
         assert!(!email.pattern.is_match("bob@gmail.com"));
@@ -594,6 +766,6 @@ pattern = '\bBDG-\d{6}\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 27);
+        assert_eq!(merged.len(), 31);
     }
 }

@@ -221,7 +221,7 @@ mod tests {
         assert_eq!(m.findings[0].disposition, Disposition::Accepted);
         assert_eq!(m.source_sha256, sha256_hex(text));
         assert_eq!(m.output_sha256, sha256_hex(&output));
-        assert_eq!(m.rules_applied.len(), 26);
+        assert_eq!(m.rules_applied.len(), 30);
     }
 
     #[test]

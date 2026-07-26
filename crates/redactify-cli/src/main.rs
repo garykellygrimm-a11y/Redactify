@@ -3,13 +3,27 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use redactify_core::{Manifest, builtin_rules, detect, load_rules_file, merge_rules, redact};
 
-/// Scan a file for sensitive data and produce sanitized output.
 #[derive(Parser)]
 #[command(name = "redactify", version, about)]
 struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Scan a file for sensitive data and produce sanitized output.
+    Scan(ScanArgs),
+    /// Check that an original file, a redacted output, and a manifest are
+    /// mutually consistent with each other.
+    Verify(VerifyArgs),
+}
+
+#[derive(clap::Args)]
+struct ScanArgs {
     /// File to scan
     input: PathBuf,
 
@@ -30,17 +44,41 @@ struct Cli {
     no_builtins: bool,
 }
 
+#[derive(clap::Args)]
+struct VerifyArgs {
+    /// The original, unredacted file
+    original: PathBuf,
+
+    /// The redacted output file to check against the manifest
+    #[arg(long)]
+    output: PathBuf,
+
+    /// The JSON audit manifest produced when the output was created
+    #[arg(long)]
+    manifest: PathBuf,
+}
+
 fn main() -> ExitCode {
-    match run(Cli::parse()) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(e) => {
-            eprintln!("error: {e}");
-            ExitCode::FAILURE
-        }
+    match Cli::parse().command {
+        Command::Scan(args) => match run_scan(args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Command::Verify(args) => match run_verify(args) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("error: {e}");
+                ExitCode::FAILURE
+            }
+        },
     }
 }
 
-fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+fn run_scan(cli: ScanArgs) -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(&cli.input)
         .map_err(|e| format!("could not read '{}': {e}", cli.input.display()))?;
 
@@ -90,4 +128,55 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// Runs `verify`. Returns Ok(true)/Ok(false) for "ran fine, here's the
+/// verdict" rather than treating a failed verification as an Err — a
+/// manifest not checking out is an expected, reportable outcome, not a
+/// program error. Err is reserved for things like unreadable files or
+/// unparseable JSON.
+fn run_verify(args: VerifyArgs) -> Result<bool, Box<dyn std::error::Error>> {
+    let source = fs::read_to_string(&args.original)
+        .map_err(|e| format!("could not read '{}': {e}", args.original.display()))?;
+    let output = fs::read_to_string(&args.output)
+        .map_err(|e| format!("could not read '{}': {e}", args.output.display()))?;
+    let manifest_json = fs::read_to_string(&args.manifest)
+        .map_err(|e| format!("could not read '{}': {e}", args.manifest.display()))?;
+    let manifest = Manifest::from_json(&manifest_json)
+        .map_err(|e| format!("invalid manifest '{}': {e}", args.manifest.display()))?;
+
+    let report = manifest.verify(&source, &output);
+
+    println!(
+        "{} source file matches manifest",
+        if report.source_hash_matches {
+            "\u{2713}"
+        } else {
+            "\u{2717}"
+        }
+    );
+    println!(
+        "{} output file matches manifest",
+        if report.output_hash_matches {
+            "\u{2713}"
+        } else {
+            "\u{2717}"
+        }
+    );
+    println!(
+        "{} every finding is accounted for (redaction reconstructs exactly)",
+        if report.redaction_matches {
+            "\u{2713}"
+        } else {
+            "\u{2717}"
+        }
+    );
+
+    if report.all_passed() {
+        println!("\nverified: this manifest's account of what happened checks out.");
+    } else {
+        println!("\nverification FAILED: the manifest does not match the given files.");
+    }
+
+    Ok(report.all_passed())
 }

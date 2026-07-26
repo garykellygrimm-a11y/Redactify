@@ -118,6 +118,78 @@ impl Manifest {
     pub fn to_json(&self) -> Result<String, RedactifyError> {
         Ok(serde_json::to_string_pretty(self)?)
     }
+
+    /// Parse a manifest back from JSON (the inverse of [`Manifest::to_json`]).
+    pub fn from_json(json: &str) -> Result<Manifest, RedactifyError> {
+        Ok(serde_json::from_str(json)?)
+    }
+
+    /// Check that `source` and `output` are consistent with this
+    /// manifest's account of what happened. See [`VerifyReport`] for what
+    /// each individual check means.
+    pub fn verify(&self, source: &str, output: &str) -> VerifyReport {
+        let source_hash_matches = sha256_hex(source) == self.source_sha256;
+        let output_hash_matches = sha256_hex(output) == self.output_sha256;
+
+        // redact() only ever reads start/end/rule_id (never `matched`),
+        // and it's a pure function: same source + same accepted findings
+        // always produces exactly the same output. So regenerating the
+        // output from `source` and just this manifest's own accepted
+        // findings, then comparing byte-for-byte against the given
+        // `output`, proves three things in one check rather than three
+        // separate ones: every accepted finding was actually redacted,
+        // every rejected finding survived untouched, and nothing else in
+        // the document was altered — any one of those being false would
+        // make the reconstruction disagree with the real output.
+        let accepted: Vec<Finding> = self
+            .findings
+            .iter()
+            .filter(|f| f.disposition == Disposition::Accepted)
+            .map(|f| Finding {
+                start: f.start,
+                end: f.end,
+                rule_id: f.rule_id.clone(),
+                matched: String::new(),
+            })
+            .collect();
+        let reconstructed = crate::redact(source, &accepted);
+        let redaction_matches = reconstructed == output;
+
+        VerifyReport {
+            source_hash_matches,
+            output_hash_matches,
+            redaction_matches,
+        }
+    }
+}
+
+/// Outcome of [`Manifest::verify`]. Each check is independent and
+/// reported separately, rather than collapsed into one bool, so a
+/// caller (the CLI, or anything else) can tell a reviewer exactly what
+/// did or didn't line up instead of just "verification failed."
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct VerifyReport {
+    /// Does `sha256_hex(source)` match `manifest.source_sha256`? False
+    /// usually means the wrong original file was provided, or it was
+    /// edited since the manifest was created.
+    pub source_hash_matches: bool,
+    /// Does `sha256_hex(output)` match `manifest.output_sha256`? False
+    /// usually means the wrong output file was provided, or it was
+    /// altered after export.
+    pub output_hash_matches: bool,
+    /// Does regenerating the output from `source` + the manifest's own
+    /// accepted findings reproduce the given `output` byte-for-byte?
+    /// This is the check that actually proves every finding is
+    /// accounted for, not just that the files' hashes agree with
+    /// whatever they happen to contain.
+    pub redaction_matches: bool,
+}
+
+impl VerifyReport {
+    /// True only if every individual check passed.
+    pub fn all_passed(&self) -> bool {
+        self.source_hash_matches && self.output_hash_matches && self.redaction_matches
+    }
 }
 
 #[cfg(test)]
@@ -226,5 +298,118 @@ mod tests {
 
         assert!(!json.contains("AKIAIOSFODNN7EXAMPLE"));
         assert!(!json.contains("bob@example.com"));
+    }
+
+    #[test]
+    fn verify_passes_for_a_correctly_redacted_output() {
+        let rules = builtin_rules();
+        let text = "bob@example.com and 10.0.0.1 both appear here";
+        let findings = detect(text, &rules);
+        let dispositions = [Disposition::Accepted, Disposition::Rejected];
+        let accepted: Vec<_> = findings
+            .iter()
+            .zip(&dispositions)
+            .filter(|(_, d)| **d == Disposition::Accepted)
+            .map(|(f, _)| f.clone())
+            .collect();
+        let output = redact(text, &accepted);
+        let manifest = Manifest::new(
+            "redactify test",
+            text,
+            &output,
+            &rules,
+            &findings,
+            &dispositions,
+        );
+
+        let report = manifest.verify(text, &output);
+        assert!(report.all_passed());
+        assert!(report.source_hash_matches);
+        assert!(report.output_hash_matches);
+        assert!(report.redaction_matches);
+    }
+
+    #[test]
+    fn verify_catches_wrong_source_file() {
+        let rules = builtin_rules();
+        let text = "bob@example.com on file";
+        let findings = detect(text, &rules);
+        let output = redact(text, &findings);
+        let manifest = Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
+
+        let report = manifest.verify("this is not the original file at all", &output);
+        assert!(!report.source_hash_matches);
+        assert!(!report.all_passed());
+    }
+
+    #[test]
+    fn verify_catches_tampered_output() {
+        let rules = builtin_rules();
+        let text = "bob@example.com on file";
+        let findings = detect(text, &rules);
+        let output = redact(text, &findings);
+        let manifest = Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
+
+        let tampered_output = format!("{output} plus some appended text");
+        let report = manifest.verify(text, &tampered_output);
+        assert!(!report.output_hash_matches);
+        assert!(!report.redaction_matches);
+        assert!(!report.all_passed());
+    }
+
+    #[test]
+    fn verify_catches_a_disposition_edited_after_the_fact() {
+        // The scenario the hash checks alone CANNOT catch: the output
+        // file is untouched (so its hash still matches), but someone
+        // edited the manifest JSON itself to claim a finding was
+        // rejected when it was actually redacted — or vice versa. Only
+        // the reconstruction check notices this, because it rebuilds
+        // from the recorded dispositions and compares against the real
+        // output, rather than trusting the recorded hash alone.
+        let rules = builtin_rules();
+        let text = "bob@example.com and 10.0.0.1 both appear here";
+        let findings = detect(text, &rules);
+        let dispositions = [Disposition::Accepted, Disposition::Rejected];
+        let accepted: Vec<_> = findings
+            .iter()
+            .zip(&dispositions)
+            .filter(|(_, d)| **d == Disposition::Accepted)
+            .map(|(f, _)| f.clone())
+            .collect();
+        let output = redact(text, &accepted);
+        let mut manifest = Manifest::new(
+            "redactify test",
+            text,
+            &output,
+            &rules,
+            &findings,
+            &dispositions,
+        );
+
+        // Flip the rejected IP to "Accepted" in the manifest, without
+        // touching the actual output file at all.
+        manifest.findings[1].disposition = Disposition::Accepted;
+
+        let report = manifest.verify(text, &output);
+        // Neither hash changed, since neither input file changed...
+        assert!(report.source_hash_matches);
+        assert!(report.output_hash_matches);
+        // ...but reconstructing from the (tampered) manifest now expects
+        // the IP to be redacted too, which the real output never did.
+        assert!(!report.redaction_matches);
+        assert!(!report.all_passed());
+    }
+
+    #[test]
+    fn manifest_json_round_trips_via_from_json() {
+        let rules = builtin_rules();
+        let text = "SSN 123-45-6789 on file";
+        let findings = detect(text, &rules);
+        let output = redact(text, &findings);
+        let original = Manifest::unreviewed("redactify test", text, &output, &rules, &findings);
+
+        let json = original.to_json().expect("serialization");
+        let parsed = Manifest::from_json(&json).expect("from_json");
+        assert_eq!(original, parsed);
     }
 }

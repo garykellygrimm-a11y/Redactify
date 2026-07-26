@@ -18,7 +18,8 @@
   "packages": {
     "app/src-tauri": {
       "release-type": "rust",
-      "component": ""
+      "component": "",
+      "pull-request-title-pattern": "chore${scope}: release Redactify ${version}"
     }
   }
 }

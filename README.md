@@ -125,9 +125,32 @@ verified: this manifest's account of what happened checks out.
 Exits non-zero if anything doesn't check out, so it's usable as a CI/script
 gate, not just an interactive check.
 
+`redactify batch` scans many files (and/or whole directories) in one run,
+in parallel:
+
+```console
+$ redactify batch logs/ reports/ --recursive --output-dir clean/ -j 4
+logs/2026/jan/app.log: 3 findings
+logs/2026/feb/app.log: 0 findings
+reports/q1.txt: 1 findings
+
+3 file(s) processed: 3 succeeded, 0 failed
+```
+
+Each input directory's relative structure is mirrored into `--output-dir`,
+nested under a folder named for that directory — so `logs/2026/jan/app.log`
+and `reports/2026/jan/app.log` never collide just because they share a
+relative path under different top-level inputs. Manifests are written
+alongside each output file using the same `<output>.manifest.json`
+convention the desktop app uses. Omit `--output-dir` to scan-only and just
+report findings per file. A failure on one file (unreadable, permission
+denied) is reported and skipped rather than aborting the whole run — but
+the process still exits non-zero if anything failed, so a script checking
+`$?` won't read a partial run as a clean success.
+
 > **Note:** as of v0.6, the CLI requires an explicit subcommand
-> (`scan`/`verify`) — `redactify input.log` alone no longer works, it's
-> `redactify scan input.log` now.
+> (`scan`/`verify`/`batch`) — `redactify input.log` alone no longer works,
+> it's `redactify scan input.log` now.
 
 ## Detection rules
 

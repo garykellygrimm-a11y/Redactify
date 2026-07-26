@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 redactify-core = { path = "../redactify-core" }
 clap = { version = "4", features = ["derive"] }
+rayon = "1"
+walkdir = "2"

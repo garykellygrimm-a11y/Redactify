@@ -14,7 +14,24 @@ pub fn detect(text: &str, rules: &[Rule]) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for rule in rules {
-        for m in rule.pattern.find_iter(text) {
+        // captures_iter (not find_iter) throughout, even for the vast
+        // majority of rules that don't use finding_group: group 0 is
+        // always the whole match, so this is exactly find_iter's
+        // behavior for them. One code path rather than branching on
+        // whether finding_group is set is simpler to get right, and the
+        // extra capture bookkeeping is immaterial at this scale (a
+        // detection pass over a document, not a hot loop).
+        let group_idx = rule.finding_group.unwrap_or(0);
+        for caps in rule.pattern.captures_iter(text) {
+            // Only None if `group_idx` refers to a group that didn't
+            // participate in this particular match (e.g. one side of an
+            // alternation) — every builtin using finding_group so far
+            // has that group in a mandatory, non-optional position, so
+            // this is a defensive skip, not an expected path.
+            let Some(m) = caps.get(group_idx) else {
+                continue;
+            };
+
             // Only runs on strings the regex already matched — cost is
             // proportional to candidate count, not document size.
             if let Some(validate) = rule.validator
@@ -477,8 +494,110 @@ mod tests {
         assert_eq!(f[0].rule_id, "mailchimp_api_key");
         // near-miss: the 32-char hex key with no datacenter suffix at
         // all — not a usable Mailchimp key, and correctly not flagged.
+        assert!(detect("key: abc123def456abc123def456abc123de used", &rules).is_empty());
+    }
+
+    #[test]
+    fn iban_validates_checksum_not_shape_alone() {
+        let rules = builtin_rules();
+        // Well-known example IBANs used throughout ISO/banking
+        // documentation (UK, Germany, France) -- not real accounts.
+        // Three different countries confirms this isn't hardcoded to
+        // one length or one country's BBAN shape.
+        let f = detect("account: GB82WEST12345698765432 on file", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "iban");
+
+        assert_eq!(
+            detect("iban: DE89370400440532013000 on file", &rules).len(),
+            1
+        );
+        // French IBAN with a letter embedded in the BBAN portion,
+        // confirming the letter-to-number conversion isn't limited to
+        // just the leading country code.
+        assert_eq!(
+            detect("iban: FR1420041010050500013M02606 on file", &rules).len(),
+            1
+        );
+
+        // Spaced, as IBANs are commonly displayed/copied.
+        let spaced = detect("account: GB82 WEST 1234 5698 7654 32 on file", &rules);
+        assert_eq!(spaced.len(), 1);
+        assert_eq!(spaced[0].rule_id, "iban");
+
+        // near-miss: same shape, wrong check digits -- fails mod-97.
+        assert!(detect("account: GB00WEST12345698765432 on file", &rules).is_empty());
+    }
+
+    #[test]
+    fn us_routing_number_validates_checksum_not_shape_alone() {
+        let rules = builtin_rules();
+        // A real, public routing number (JPMorgan Chase, NY) -- routing
+        // numbers identify banks, not individual accounts, so there's
+        // no privacy concern using a real one.
+        let f = detect("routing: 021000021 on file", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "us_routing_number");
+
+        // near-miss: same 9-digit shape, fails the weighted checksum.
+        assert!(detect("routing: 021000022 on file", &rules).is_empty());
+    }
+
+    #[test]
+    fn canadian_sin_validates_via_luhn() {
+        let rules = builtin_rules();
+        // Synthetic (not a real person's) 9-digit number constructed to
+        // satisfy Luhn, purely as a test fixture -- Canada doesn't
+        // publish an official test SIN the way Visa/Mastercard publish
+        // test card numbers.
+        let f = detect("sin: 100000009 on file", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "canadian_sin");
+
+        // near-miss: same shape, fails Luhn.
+        assert!(detect("sin: 100000001 on file", &rules).is_empty());
+    }
+
+    #[test]
+    fn db_connection_string_flags_only_the_password() {
+        let rules = builtin_rules();
+        // The whole connection string is required for the match (a
+        // bare password alone has no distinguishing context at all),
+        // but finding_group narrows the actual finding to just the
+        // captured group (colon + password) -- the host, username, and
+        // scheme are NOT part of what gets flagged or redacted.
+        let text = "conn: postgres://admin:hunter2@db.example.com/mydb used";
+        let f = detect(text, &rules);
+        // f.len() == 1 with rule_id == db_connection_string (not "email")
+        // is exactly what proves the leading-colon fix above works:
+        // "hunter2@db.example.com" independently matches the email rule
+        // too, and without the colon shift this assertion would fail
+        // with rule_id == "email" instead -- verified this the hard way
+        // before adding the colon to the capture group.
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "db_connection_string");
+        assert_eq!(f[0].matched, ":hunter2");
+
+        // Redis's common no-username convention: redis://:password@host.
+        // An earlier draft of this pattern required at least one
+        // username character and silently missed this shape entirely.
+        let redis = detect("conn: redis://:onlypassword@cache.local:6379 used", &rules);
+        assert_eq!(redis.len(), 1);
+        assert_eq!(redis[0].matched, ":onlypassword");
+
+        // near-miss: same user:pass@host shape, but not one of the
+        // recognized database schemes. Checking specifically for the
+        // absence of a db_connection_string finding, not that the whole
+        // result is empty — the existing email rule separately and
+        // correctly matches "pass@example.com" within this same string
+        // (an unrelated, pre-existing property of that rule), which a
+        // blanket is_empty() assertion here would have wrongly treated
+        // as this rule's problem. Caught by an actual cargo test run.
+        let https_result = detect("url: https://user:pass@example.com/path used", &rules);
         assert!(
-            detect("key: abc123def456abc123def456abc123de used", &rules).is_empty()
+            !https_result
+                .iter()
+                .any(|f| f.rule_id == "db_connection_string")
         );
     }
 

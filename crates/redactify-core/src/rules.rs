@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use regex::{Regex, RegexBuilder};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use crate::error::RedactifyError;
 
@@ -292,6 +295,57 @@ pub fn builtin_rules() -> Vec<Rule> {
             r"\b\d(?:[ -]?\d){12,18}\b",
             luhn_valid,
         ),
+        // JSON Web Token: header.payload.signature, each base64url (RFC
+        // 4648 §5, no padding). A bare shape match on "three dot-
+        // separated base64-ish segments" is far too liberal on its own —
+        // that shape shows up coincidentally in package names, version
+        // strings, and other unrelated contexts. The validator decodes
+        // the header segment and confirms it's actually valid JSON
+        // containing an "alg" key, which every real JWT header has per
+        // RFC 7519 — turning this from a shape-only rule (which we'd
+        // correctly rejected before) into one with real structural
+        // validation behind it, the same category of improvement Luhn
+        // gave the credit-card rule.
+        Rule::with_validator(
+            "jwt",
+            "JSON Web Token",
+            r"\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b",
+            jwt_header_is_valid,
+        ),
+        // Bitcoin address (P2PKH/P2SH, legacy Base58Check forms — not
+        // the newer Bech32 "bc1..." SegWit format, which uses a
+        // different checksum scheme entirely and would need its own
+        // rule). Real checksum: the last 4 bytes of the decoded 25 bytes
+        // must equal the first 4 bytes of double-SHA256 of the
+        // preceding 21 bytes. Verified against real, publicly-known
+        // addresses (the Bitcoin genesis block address, and a
+        // well-known P2SH address) rather than constructed test data.
+        Rule::with_validator(
+            "bitcoin_address",
+            "Bitcoin Address",
+            r"\b[13][1-9A-HJ-NP-Za-km-z]{25,34}\b",
+            bitcoin_address_is_valid,
+        ),
+        // Discord webhook URL: fixed domain + path structure with a
+        // Snowflake id (17-19 digits) and an opaque token. High
+        // precision given the fixed https://discord(app).com/api/.../
+        // webhooks/ prefix — about as distinctive as a URL-shaped rule
+        // gets.
+        Rule::new(
+            "discord_webhook",
+            "Discord Webhook URL",
+            r"https://(?:canary\.|ptb\.)?discord(?:app)?\.com/api(?:/v\d+)?/webhooks/\d{17,19}/[\w-]+",
+        ),
+        // Mailchimp API key: 32-char hex + a datacenter suffix
+        // (-us1..-us21 etc). The suffix is mandatory for the key to
+        // actually work, so requiring it here is not just liberal
+        // matching — a bare 32-char hex string with no suffix isn't a
+        // valid Mailchimp key at all.
+        Rule::new(
+            "mailchimp_api_key",
+            "Mailchimp API Key",
+            r"\b[0-9a-f]{32}-[a-z]{2}\d{1,2}\b",
+        ),
     ]
 }
 
@@ -323,6 +377,37 @@ fn luhn_valid(matched: &str) -> bool {
         })
         .sum();
     sum.is_multiple_of(10)
+}
+
+/// Decode the JWT's header segment and confirm it's valid JSON containing
+/// an "alg" key — the one field RFC 7519 guarantees every JWT header has.
+fn jwt_header_is_valid(matched: &str) -> bool {
+    let Some((header_b64, _rest)) = matched.split_once('.') else {
+        return false;
+    };
+    let Ok(decoded) = URL_SAFE_NO_PAD.decode(header_b64) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&decoded) else {
+        return false;
+    };
+    value.get("alg").is_some()
+}
+
+/// Base58Check validation: decode, split into the 21-byte payload and its
+/// 4-byte checksum, and confirm the checksum equals the first 4 bytes of
+/// double-SHA256 of the payload.
+fn bitcoin_address_is_valid(matched: &str) -> bool {
+    let Ok(raw) = bs58::decode(matched).into_vec() else {
+        return false;
+    };
+    if raw.len() != 25 {
+        return false;
+    }
+    let (payload, checksum) = raw.split_at(21);
+    let first_hash = Sha256::digest(payload);
+    let second_hash = Sha256::digest(first_hash);
+    &second_hash[..4] == checksum
 }
 
 // ---------------------------------------------------------------------------
@@ -489,7 +574,7 @@ pattern = '\b[a-z.]+@corp\.example\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 22, "override must replace, not add");
+        assert_eq!(merged.len(), 26, "override must replace, not add");
         let email = merged.iter().find(|r| r.id == "email").expect("email rule");
         assert_eq!(email.name, "Corp Email Only");
         assert!(!email.pattern.is_match("bob@gmail.com"));
@@ -509,6 +594,6 @@ pattern = '\bBDG-\d{6}\b'
         .expect("should parse");
 
         let merged = merge_rules(builtin_rules(), user);
-        assert_eq!(merged.len(), 23);
+        assert_eq!(merged.len(), 27);
     }
 }

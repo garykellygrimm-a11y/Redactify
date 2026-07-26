@@ -154,15 +154,16 @@ the process still exits non-zero if anything failed, so a script checking
 
 ## Detection rules
 
-Twenty-two builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
+Twenty-six builtin rules: email, IPv4, IPv6, US SSN, US phone, AWS access
 key ID, GCP API key, GCP OAuth client ID, Oracle Cloud Identifier (OCID),
 Azure SAS token, a generic PEM private-key block (covers leaked keys from
 AWS, GCP, Oracle, and plain SSH with one rule), Stripe API key,
 DigitalOcean API token, SendGrid API key, GitHub token (classic and
 fine-grained), Slack token, HashiCorp Vault token, OpenAI API key,
-Anthropic API key, npm access token, Twilio SID, and credit/debit card
-number (Luhn-validated — the one rule with a real checksum behind it,
-not shape-matching alone).
+Anthropic API key, npm access token, Twilio SID, credit/debit card number
+(Luhn-validated), JSON Web Token (shape plus a real header-decode check,
+not shape-matching alone), Bitcoin address (Base58Check-validated),
+Discord webhook URL, and Mailchimp API key.
 Add your own in TOML (`--rules` in the CLI, File → Load Rules in the
 app; same-id rules override builtins):
 

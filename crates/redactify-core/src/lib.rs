@@ -420,6 +420,68 @@ mod tests {
         assert!(detect("order number 1234567890123456 today", &rules).is_empty());
     }
 
+    #[test]
+    fn jwt_validates_header_not_shape_alone() {
+        let rules = builtin_rules();
+        // A real, publicly-documented example JWT (jwt.io's own
+        // introductory example) — not a live token.
+        let text = "token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "jwt");
+
+        // near-miss: three dot-separated segments (matches the bare
+        // shape) that are NOT a JWT — a dotted package/module name. This
+        // is exactly the false-positive category a shape-only rule would
+        // have caught, and the validator correctly rejects.
+        assert!(detect("import com.example.app.MainActivity", &rules).is_empty());
+    }
+
+    #[test]
+    fn bitcoin_address_validates_checksum_not_shape_alone() {
+        let rules = builtin_rules();
+        // Real, publicly-known addresses: the Bitcoin genesis block
+        // address (P2PKH, starts with 1) and a well-known P2SH address
+        // (starts with 3) — both real, neither a secret to expose.
+        let f = detect("wallet: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa used", &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "bitcoin_address");
+
+        assert_eq!(
+            detect("p2sh: 3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy used", &rules).len(),
+            1
+        );
+
+        // near-miss: same shape and length, but the last character is
+        // altered — fails the Base58Check checksum.
+        assert!(detect("wallet: 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNb used", &rules).is_empty());
+    }
+
+    #[test]
+    fn discord_webhook_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "hook: https://discord.com/api/webhooks/123456789123456789/C9WPqExYWONPDZabcdef-def1434FGFjstasJX9pYht73y used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "discord_webhook");
+        // near-miss: a discord.com URL that isn't a webhook endpoint
+        assert!(detect("link: https://discord.com/channels/123/456 used", &rules).is_empty());
+    }
+
+    #[test]
+    fn mailchimp_api_key_detects_and_rejects() {
+        let rules = builtin_rules();
+        let text = "key: abc123def456abc123def456abc123de-us14 used";
+        let f = detect(text, &rules);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].rule_id, "mailchimp_api_key");
+        // near-miss: the 32-char hex key with no datacenter suffix at
+        // all — not a usable Mailchimp key, and correctly not flagged.
+        assert!(
+            detect("key: abc123def456abc123def456abc123de used", &rules).is_empty()
+        );
+    }
+
     // ---------- the hard parts ----------
 
     #[test]

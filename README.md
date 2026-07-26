@@ -100,13 +100,34 @@ original and the export must match the manifest.
 ## The CLI
 
 ```console
-$ redactify input.log -o clean.log --manifest audit.json
+$ redactify scan input.log -o clean.log --manifest audit.json
 6 findings: 1 aws_access_key, 1 email, 2 ipv4, 1 ssn, 1 us_phone
 ```
 
 Sanitized output to stdout (or `-o`), summary to stderr, so shell
 redirection captures clean content only. CLI manifests mark every
 finding `accepted` — truthfully, since no human review occurred.
+
+`redactify verify` checks that an original file, a redacted output, and
+the manifest produced alongside it are still mutually consistent — hashes
+match, and regenerating the output from the original plus the manifest's
+own accepted findings reproduces it byte-for-byte:
+
+```console
+$ redactify verify input.log --output clean.log --manifest audit.json
+✓ source file matches manifest
+✓ output file matches manifest
+✓ every finding is accounted for (redaction reconstructs exactly)
+
+verified: this manifest's account of what happened checks out.
+```
+
+Exits non-zero if anything doesn't check out, so it's usable as a CI/script
+gate, not just an interactive check.
+
+> **Note:** as of v0.6, the CLI requires an explicit subcommand
+> (`scan`/`verify`) — `redactify input.log` alone no longer works, it's
+> `redactify scan input.log` now.
 
 ## Detection rules
 

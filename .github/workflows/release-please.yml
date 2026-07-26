@@ -35,13 +35,32 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Check whether there's actually anything new to sync
+        id: check
+        # app/src-tauri/CHANGELOG.md only exists when release-please just
+        # wrote fresh content this run. Its absence means release_created
+        # fired for a release that's already been fully reconciled —
+        # e.g. release creation retroactively succeeding after a token
+        # fix, well after this job already ran (or was handled by hand)
+        # for that same release. Nothing to do in that case; skip
+        # cleanly instead of crashing on a missing file.
+        run: |
+          if [ -f app/src-tauri/CHANGELOG.md ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No app/src-tauri/CHANGELOG.md found — nothing new to sync, skipping."
+          fi
+
       - name: Read the version release-please just tagged
         id: version
+        if: steps.check.outputs.exists == 'true'
         run: |
           VERSION=$(grep -m1 '^version' app/src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Sync redactify-core, redactify-cli, and package.json to match
+        if: steps.check.outputs.exists == 'true'
         run: |
           V="${{ steps.version.outputs.version }}"
           sed -i "0,/^version = \".*\"/s//version = \"$V\"/" crates/redactify-core/Cargo.toml
@@ -54,6 +73,7 @@ jobs:
           " "$V"
 
       - name: Fold the new entry into the root CHANGELOG.md
+        if: steps.check.outputs.exists == 'true'
         run: |
           # release-please's local changelog always has exactly one
           # version section at this point, since this step deletes it
@@ -68,6 +88,7 @@ jobs:
           rm app/src-tauri/CHANGELOG.md
 
       - name: Open a PR with the synced files
+        if: steps.check.outputs.exists == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: "chore: sync versions to v${{ steps.version.outputs.version }}"

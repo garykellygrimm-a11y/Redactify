@@ -191,17 +191,22 @@ Shipped:
 - ✅ **M3** — User-defined rules (TOML, fail-fast validation)
 - ✅ **M4** — Desktop app: review UI, export, custom rules, themes
 - ✅ **M5** — Installers and binary releases for Windows, macOS, and Linux
+- ✅ **v0.5.0** — Virtualized document rendering, a recent files menu,
+  accessibility features and a keyboard shortcuts help panel, a revised
+  keyboard model, Save/Export, before/after preview refinement, 17 new
+  detection rules including a Luhn-validated credit/debit card rule (22
+  builtins total, up from 5), and automated version bumps and changelog
+  generation via release-please
 
 Planned:
 
-- ⬜ **v0.5 — Loose ends.** Virtualized document rendering for very large
-  files, a recent files menu, refinement of the before/after preview, and a
-  second attempt at automated version bumps and changelog generation.
 - ⬜ **v0.6 — Verification.** A `redactify verify` command that takes an
   original file, its redacted output, and the manifest, and confirms the
   chain: hashes match, every finding is accounted for, nothing was altered
-  after the fact. Plus batch processing and additional builtin rules —
-  Luhn-validated card numbers, IPv6, more cloud credential formats.
+  after the fact. Batch processing. Checksum-validated detection rules —
+  IBAN, US bank routing number, Canadian SIN. Capture-group support on
+  `Rule`, and a database-connection-string rule built on it that redacts
+  just the embedded credential rather than the whole connection string.
 - ⬜ **v0.7 — Rule authoring in the app.** A rule editor with live match
   highlighting against the open document, a block-based builder for people
   who would rather not write regex by hand, and select-to-suggest: highlight
@@ -210,7 +215,16 @@ Planned:
   authored in the app is trapped there.
 - ⬜ **v0.8 — Signed and self-updating.** Code-signed builds, in-app updates,
   and distribution through winget and Homebrew.
-- ⬜ **v1.0 — Documents.** PDF and DOCX support, with redaction that removes
+- ⬜ **v1.0 — Complete and tested.** A real completeness bar, not a feature
+  list: correctness checked against a broader corpus of realistic
+  documents, not just per-rule tests; the cross-platform installers
+  actually exercised through a full review-and-export cycle on each OS, not
+  just built; `redactify verify` exercised as a genuine check rather than
+  an aspiration; deliberate tests for real failure modes — corrupted files,
+  very large files, permission errors on export, malformed custom rules;
+  and documentation that matches what's actually shipped. Signed builds
+  carry over from v0.8.
+- ⬜ **v1.1 — Documents.** PDF and DOCX support, with redaction that removes
   content rather than drawing rectangles over it — the failure mode that
   leaks names out of "redacted" filings with some regularity.
 

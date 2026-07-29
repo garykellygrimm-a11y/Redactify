@@ -32,6 +32,24 @@ const ROOT = process.cwd();
 const BEGIN = "<!-- BEGIN GENERATED CHANGELOG -->";
 const END = "<!-- END GENERATED CHANGELOG -->";
 
+/*
+ * Read a file, returning null if it doesn't exist.
+ *
+ * Deliberately try/catch rather than an fs.existsSync() guard followed by
+ * a read: check-then-use is a TOCTOU pattern (CodeQL js/file-system-race,
+ * CWE-367) because the file can change between the two calls, which makes
+ * the check meaningless. Attempting the operation and handling failure has
+ * no such window — and is less code.
+ */
+function readIfPresent(filePath) {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  }
+}
+
 const SOURCES = [
   { label: "Desktop App", file: "app/CHANGELOG.md" },
   { label: "CLI", file: "crates/redactify-cli/CHANGELOG.md" },
@@ -66,12 +84,12 @@ function parseChangelog(text, label) {
 
 function main() {
   const rootPath = path.join(ROOT, "CHANGELOG.md");
-  if (!fs.existsSync(rootPath)) {
+  const rootText = readIfPresent(rootPath);
+  if (rootText === null) {
     console.error("error: CHANGELOG.md not found — run this from the repo root");
     process.exit(1);
   }
 
-  const rootText = fs.readFileSync(rootPath, "utf8");
   const beginIdx = rootText.indexOf(BEGIN);
   const endIdx = rootText.indexOf(END);
   if (beginIdx === -1 || endIdx === -1 || endIdx < beginIdx) {
@@ -83,13 +101,13 @@ function main() {
 
   let entries = [];
   for (const src of SOURCES) {
-    const p = path.join(ROOT, src.file);
-    if (!fs.existsSync(p)) {
+    const text = readIfPresent(path.join(ROOT, src.file));
+    if (text === null) {
       // Expected before a package's first release — not an error.
       console.log(`  (no changelog yet at ${src.file}, skipping)`);
       continue;
     }
-    entries = entries.concat(parseChangelog(fs.readFileSync(p, "utf8"), src.label));
+    entries = entries.concat(parseChangelog(text, src.label));
   }
 
   // Newest first. Within one date, keep SOURCES order (app then CLI) so

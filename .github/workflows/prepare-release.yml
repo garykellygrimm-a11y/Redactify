@@ -26,11 +26,21 @@ jobs:
           # start counting commits — a shallow clone would make it think
           # nothing has ever been released.
           fetch-depth: 0
-          # PAT rather than GITHUB_TOKEN for two reasons: a branch pushed
-          # with GITHUB_TOKEN doesn't trigger workflows, so ci.yml/audit.yml
-          # /codeql.yml would never report on the release PR and required
-          # checks would block the merge forever.
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          # PAT rather than GITHUB_TOKEN: a branch pushed with GITHUB_TOKEN
+          # doesn't trigger workflows, so ci.yml/audit.yml/codeql.yml would
+          # never report on the release PR and required checks would block
+          # the merge forever.
+          #
+          # Needs Contents, Pull requests, and Workflows all set to
+          # read/write. If the secret name is wrong or missing, the
+          # reference resolves to an empty string, which overrides
+          # checkout's default token and fails with the confusing
+          # "Input required and not supplied: token".
+          #
+          # The name predates both release-plz and release-please; it's kept
+          # as-is because GitHub won't reveal an existing secret's value, so
+          # renaming means regenerating a working PAT for no functional gain.
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
       - uses: actions/setup-node@v7
         with:
@@ -50,4 +60,4 @@ jobs:
       - name: Prepare the release PR
         run: knope prepare-release --verbose
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

@@ -192,9 +192,37 @@ jobs:
           echo "--- app ---"; ls -la artifacts/app
           echo "--- cli ---"; ls -la artifacts/cli
 
-      - uses: knope-dev/action@v2.1.0
-        with:
-          version: 0.22.4
+      # Installed by direct download rather than knope-dev/action@v2.1.0.
+      # That action resolves the release asset with a "*linux*" style glob,
+      # which now matches BOTH knope-aarch64-unknown-linux-musl.tgz and
+      # knope-x86_64-unknown-linux-musl.tgz — it then hands both names to
+      # tar as one filename and dies. Knope's own manual install docs have
+      # the same flaw. Naming the exact asset sidesteps it, and the version
+      # stays pinned in one obvious place.
+      #
+      # Note the "knope/" segment in the URL: Knope's own repo is a
+      # monorepo and tags its releases knope/v0.22.4, not v0.22.4 — the
+      # same tagging scheme this repo is adopting. Verified: the URL below
+      # resolves, extracts to knope-x86_64-unknown-linux-musl/knope, and
+      # reports "knope 0.22.4".
+      #
+      # Extracted under /tmp so the archive and its contents never land in
+      # the checkout.
+      - name: Install Knope
+        env:
+          KNOPE_VERSION: "0.22.4"
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          curl -fsSL -o "$workdir/knope.tgz" \
+            "https://github.com/knope-dev/knope/releases/download/knope/v${KNOPE_VERSION}/knope-x86_64-unknown-linux-musl.tgz"
+          tar -xzf "$workdir/knope.tgz" -C "$workdir"
+          bin="$(find "$workdir" -type f -name knope | head -1)"
+          [ -n "$bin" ] || { echo "knope binary not found in archive" >&2; exit 1; }
+          chmod +x "$bin"
+          sudo mv "$bin" /usr/local/bin/knope
+          rm -rf "$workdir"
+          knope --version
 
       - name: Create the releases and upload assets
         run: knope release --verbose

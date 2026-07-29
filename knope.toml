@@ -17,10 +17,23 @@ versioned_files = [
 changelog = "app/CHANGELOG.md"
 scopes = ["app", "core"]
 
+# A glob, not a file list. Knope accepts either a glob string or an
+# array-of-tables of {path, name} — a mapping of path=name is not a valid
+# shape. The glob is the better fit here anyway: Tauri emits
+# version-stamped filenames (Redactify_0.6.0_x64-setup.exe) and a glob
+# takes them as-is, so nothing has to be renamed and the version stays
+# visible in the download name.
+#
+# Each package globs its own subdirectory so app installers and CLI
+# binaries can't bleed into each other's release.
+assets = "artifacts/app/*"
+
 [packages.redactify-cli]
 versioned_files = ["crates/redactify-cli/Cargo.toml"]
 changelog = "crates/redactify-cli/CHANGELOG.md"
 scopes = ["cli", "core"]
+
+assets = "artifacts/cli/*"
 
 # ---------------------------------------------------------------------------
 # prepare-release: run on every push to main, keeps one open release PR
@@ -74,6 +87,25 @@ template = "chore: prepare release"
 
 [workflows.steps.body]
 template = "Opened automatically by Knope. Merging this creates a release for every package that has changes.\n\nCheck the diff for the new version numbers and changelog entries."
+
+# ---------------------------------------------------------------------------
+# document-change: create a changeset by hand
+# ---------------------------------------------------------------------------
+# Defining any workflows in knope.toml REPLACES Knope's built-in commands,
+# so `document-change` has to be declared explicitly to exist at all —
+# it's not available just because it's a built-in.
+#
+# This is the lever for forcing a bump Knope wouldn't infer. Pre-1.0 it
+# treats `feat` as a patch and only a breaking change as a minor, so the
+# app version would otherwise drift away from the README roadmap's
+# v0.6/v0.7/v0.8 milestone numbering. Run this, pick the package and the
+# level, and commit the generated change file.
+
+[[workflows]]
+name = "document-change"
+
+[[workflows.steps]]
+type = "CreateChangeFile"
 
 # ---------------------------------------------------------------------------
 # release: run when the release PR merges

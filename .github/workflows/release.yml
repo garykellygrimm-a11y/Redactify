@@ -1,0 +1,202 @@
+name: Release
+
+# Runs when the `chore/release` PR merges. Builds every artifact, then
+# hands them to Knope's Release step, which creates each release as a
+# draft, uploads its assets, and publishes — so subscribers aren't
+# notified until the installers are actually attached.
+#
+# Also manually dispatchable, because a platform build failing partway
+# through is a normal thing that needs retrying without re-merging
+# anything.
+#
+# Two releases come out of this, not one: redactify-app/vX.Y.Z carrying
+# installers, and redactify-cli/vX.Y.Z carrying binaries. That's the
+# consequence of independent versioning — they no longer share a version,
+# so they can't share a release.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-app:
+    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+          - platform: ubuntu-22.04
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Install Tauri system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential \
+            curl wget file libxdo-dev libssl-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - name: Install frontend dependencies
+        run: npm install
+        working-directory: app
+
+      # No tagName/releaseName: this only BUILDS. Knope owns release
+      # creation now, so tauri-action must not create one of its own.
+      - name: Build the desktop app
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: app
+          args: ${{ matrix.args }}
+
+      # Flatten the bundles into one directory. Two reasons this exists
+      # rather than uploading the bundle paths directly:
+      #   - upload-artifact preserves directory structure relative to the
+      #     common ancestor of what it matches, so installers would arrive
+      #     nested under nsis/, dmg/, deb/ etc. A `*` glob doesn't cross
+      #     directory separators, so knope.toml's asset glob would miss them.
+      #   - Tauri's output layout differs per platform (and macOS builds
+      #     land under target/universal-apple-darwin/), so a find is more
+      #     robust than three hardcoded paths.
+      # shell: bash everywhere, including Windows, where the runner has Git
+      # Bash — one step instead of a PowerShell variant.
+      - name: Stage installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          find app/src-tauri/target -path '*/release/bundle/*' \
+            \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.dmg' \
+               -o -name '*.AppImage' -o -name '*.deb' \) \
+            -exec cp {} staging/ \;
+          ls -la staging
+          # Guard against silently shipping an empty release if Tauri's
+          # output layout ever changes.
+          [ -n "$(ls -A staging)" ] || { echo "no installers found to stage" >&2; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.platform }}
+          path: staging/*
+          if-no-files-found: error
+
+  build-cli:
+    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: redactify-cli.exe
+            archive: redactify-cli-windows-x64.zip
+            # Fully static CRT: the binary runs on a bare Windows box
+            # with zero dependencies — the air-gap story, delivered.
+            rustflags: "-C target-feature=+crt-static"
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            artifact: redactify-cli
+            archive: redactify-cli-macos-arm64.tar.gz
+            rustflags: ""
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: redactify-cli
+            archive: redactify-cli-linux-x64.tar.gz
+            rustflags: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release -p redactify-cli --target ${{ matrix.target }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.artifact }}" -DestinationPath "${{ matrix.archive }}"
+          (Get-FileHash "${{ matrix.archive }}" -Algorithm SHA256).Hash.ToLower() + "  ${{ matrix.archive }}" | Out-File -Encoding ascii "${{ matrix.archive }}.sha256"
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          tar -czf "${{ matrix.archive }}" -C "target/${{ matrix.target }}/release" "${{ matrix.artifact }}"
+          shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.platform }}
+          path: |
+            ${{ matrix.archive }}
+            ${{ matrix.archive }}.sha256
+          if-no-files-found: error
+
+  release:
+    needs: [build-app, build-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Tags needed: Release creates a release for any package whose
+          # current version doesn't match its latest version tag, so it has
+          # to be able to see those tags.
+          fetch-depth: 0
+
+      # Downloaded into SEPARATE directories, matching the per-package
+      # asset globs in knope.toml (artifacts/app/* and artifacts/cli/*).
+      # merge-multiple flattens each matrix job's upload within its own
+      # directory; the `pattern` filter is what keeps app and CLI apart.
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/app
+          pattern: app-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/cli
+          pattern: cli-*
+          merge-multiple: true
+
+      - name: Show what will be uploaded
+        run: |
+          echo "--- app ---"; ls -la artifacts/app
+          echo "--- cli ---"; ls -la artifacts/cli
+
+      - uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.22.4
+
+      - name: Create the releases and upload assets
+        run: knope release --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

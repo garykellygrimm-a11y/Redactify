@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+Redactify ships as two independently versioned packages: the desktop app and
+the CLI. The entries below are aggregated automatically from
+`app/CHANGELOG.md` and `crates/redactify-cli/CHANGELOG.md` — edit those, not
+the generated region here.
+
+<!-- BEGIN GENERATED CHANGELOG -->
+
+
+
+<!-- END GENERATED CHANGELOG -->
+
+---
+
+## Unified releases (0.5.0 and earlier)
+
+Through 0.5.0 the app and CLI shared a single version number. These entries
+are frozen history and are not regenerated.
+
 ## [0.5.0] - 2026-07-25
 
 ### Added

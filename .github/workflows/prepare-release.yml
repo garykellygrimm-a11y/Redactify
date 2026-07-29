@@ -1,0 +1,53 @@
+name: Prepare Release
+
+# Runs on every push to main and keeps a single open release PR
+# (`chore/release`) current: bumped versions, per-package changelogs, and
+# the aggregated root CHANGELOG.md. Merging that PR is what triggers
+# release.yml.
+#
+# The `if` guard is load-bearing: when the release PR itself merges, the
+# squashed commit message is "chore: prepare release". Without the guard
+# this workflow would immediately re-run on its own merge and try to
+# prepare a release of the release.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  prepare-release:
+    if: "!contains(github.event.head_commit.message, 'chore: prepare release')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history AND tags. Knope reads the last package version tag
+          # (redactify-app/v0.5.0, redactify-cli/v0.5.0) to decide where to
+          # start counting commits — a shallow clone would make it think
+          # nothing has ever been released.
+          fetch-depth: 0
+          # PAT rather than GITHUB_TOKEN for two reasons: a branch pushed
+          # with GITHUB_TOKEN doesn't trigger workflows, so ci.yml/audit.yml
+          # /codeql.yml would never report on the release PR and required
+          # checks would block the merge forever.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+
+      - uses: knope-dev/action@v2.1.0
+        with:
+          # Match whatever `knope --version` reports locally, so CI and
+          # local runs can't silently diverge in behavior.
+          version: 0.22.4
+
+      - name: Configure git identity for the release commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Prepare the release PR
+        run: knope prepare-release --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

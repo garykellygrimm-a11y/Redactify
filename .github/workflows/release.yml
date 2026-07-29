@@ -1,13 +1,28 @@
 name: Release
 
+# Runs when the `chore/release` PR merges. Builds every artifact, then
+# hands them to Knope's Release step, which creates each release as a
+# draft, uploads its assets, and publishes — so subscribers aren't
+# notified until the installers are actually attached.
+#
+# Also manually dispatchable, because a platform build failing partway
+# through is a normal thing that needs retrying without re-merging
+# anything.
+#
+# Two releases come out of this, not one: redactify-app/vX.Y.Z carrying
+# installers, and redactify-cli/vX.Y.Z carrying binaries. That's the
+# consequence of independent versioning — they no longer share a version,
+# so they can't share a release.
+
 on:
-  push:
-    tags: ["v*"]
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
 
 jobs:
-  app:
-    permissions:
-      contents: write
+  build-app:
+    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +36,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - name: Install Tauri system dependencies (Linux)
         if: matrix.platform == 'ubuntu-22.04'
@@ -42,21 +59,47 @@ jobs:
         run: npm install
         working-directory: app
 
-      - name: Build and attach to release
+      # No tagName/releaseName: this only BUILDS. Knope owns release
+      # creation now, so tauri-action must not create one of its own.
+      - name: Build the desktop app
         uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: app
-          tagName: ${{ github.ref_name }}
-          releaseName: "Redactify ${{ github.ref_name }}"
-          releaseBody: "Installers are unsigned — verify the SHA-256 checksums attached to this release against your download."
-          releaseDraft: true
           args: ${{ matrix.args }}
 
-  cli:
-    permissions:
-      contents: write
+      # Flatten the bundles into one directory. Two reasons this exists
+      # rather than uploading the bundle paths directly:
+      #   - upload-artifact preserves directory structure relative to the
+      #     common ancestor of what it matches, so installers would arrive
+      #     nested under nsis/, dmg/, deb/ etc. A `*` glob doesn't cross
+      #     directory separators, so knope.toml's asset glob would miss them.
+      #   - Tauri's output layout differs per platform (and macOS builds
+      #     land under target/universal-apple-darwin/), so a find is more
+      #     robust than three hardcoded paths.
+      # shell: bash everywhere, including Windows, where the runner has Git
+      # Bash — one step instead of a PowerShell variant.
+      - name: Stage installers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging
+          find app/src-tauri/target -path '*/release/bundle/*' \
+            \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.dmg' \
+               -o -name '*.AppImage' -o -name '*.deb' \) \
+            -exec cp {} staging/ \;
+          ls -la staging
+          # Guard against silently shipping an empty release if Tauri's
+          # output layout ever changes.
+          [ -n "$(ls -A staging)" ] || { echo "no installers found to stage" >&2; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.platform }}
+          path: staging/*
+          if-no-files-found: error
+
+  build-cli:
+    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -81,6 +124,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -104,10 +149,54 @@ jobs:
           tar -czf "${{ matrix.archive }}" -C "target/${{ matrix.target }}/release" "${{ matrix.artifact }}"
           shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
 
-      - name: Attach to release
-        uses: softprops/action-gh-release@v3
+      - uses: actions/upload-artifact@v4
         with:
-          draft: true
-          files: |
+          name: cli-${{ matrix.platform }}
+          path: |
             ${{ matrix.archive }}
             ${{ matrix.archive }}.sha256
+          if-no-files-found: error
+
+  release:
+    needs: [build-app, build-cli]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          # Tags needed: Release creates a release for any package whose
+          # current version doesn't match its latest version tag, so it has
+          # to be able to see those tags.
+          fetch-depth: 0
+
+      # Downloaded into SEPARATE directories, matching the per-package
+      # asset globs in knope.toml (artifacts/app/* and artifacts/cli/*).
+      # merge-multiple flattens each matrix job's upload within its own
+      # directory; the `pattern` filter is what keeps app and CLI apart.
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/app
+          pattern: app-*
+          merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/cli
+          pattern: cli-*
+          merge-multiple: true
+
+      - name: Show what will be uploaded
+        run: |
+          echo "--- app ---"; ls -la artifacts/app
+          echo "--- cli ---"; ls -la artifacts/cli
+
+      - uses: knope-dev/action@v2.1.0
+        with:
+          version: 0.22.4
+
+      - name: Create the releases and upload assets
+        run: knope release --verbose
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}

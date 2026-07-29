@@ -199,4 +199,4 @@ jobs:
       - name: Create the releases and upload assets
         run: knope release --verbose
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

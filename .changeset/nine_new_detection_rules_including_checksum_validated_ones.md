@@ -1,5 +1,5 @@
 ---
-redactify-app: minor
+redactify-app: major
 ---
 
 # Nine new detection rules, including checksum-validated ones

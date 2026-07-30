@@ -51,7 +51,7 @@ name = "prepare-release"
 
 [[workflows.steps]]
 type = "Command"
-command = "git switch -c chore/release"
+command = "git switch -C chore/release"
 
 [[workflows.steps]]
 type = "PrepareRelease"

@@ -13,6 +13,16 @@ name: Prepare Release
 on:
   push:
     branches: [main]
+  # Manual trigger for the retry case: a run that computed the wrong
+  # version (missing changeset, say) can be redone with an explicit
+  # override rather than needing a no-op commit pushed to main just to
+  # re-trigger the workflow.
+  workflow_dispatch:
+    inputs:
+      override_version:
+        description: "Optional: force versions, e.g. redactify-app=0.6.0 (see knope prepare-release --help)"
+        required: false
+        type: string
 
 jobs:
   prepare-release:
@@ -84,6 +94,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Prepare the release PR
-        run: knope prepare-release --verbose
+        run: |
+          if [ -n "${{ inputs.override_version }}" ]; then
+            knope prepare-release --verbose --override-version "${{ inputs.override_version }}"
+          else
+            knope prepare-release --verbose
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

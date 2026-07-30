@@ -1,3 +1,13 @@
+## 0.6.1 (2026-07-30)
+
+### Features
+
+- add JWT, Bitcoin address, Discord webhook, Mailchimp key (#89)
+
+### Fixes
+
+- fix Canadian SIN checksum bug and a wrong test assertion (#91)
+
 ## 0.6.0 (2026-07-30)
 
 ### Breaking Changes

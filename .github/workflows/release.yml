@@ -73,9 +73,15 @@ jobs:
       #     common ancestor of what it matches, so installers would arrive
       #     nested under nsis/, dmg/, deb/ etc. A `*` glob doesn't cross
       #     directory separators, so knope.toml's asset glob would miss them.
-      #   - Tauri's output layout differs per platform (and macOS builds
-      #     land under target/universal-apple-darwin/), so a find is more
-      #     robust than three hardcoded paths.
+      #   - Tauri's output layout differs per platform (macOS universal
+      #     builds land under target/universal-apple-darwin/), so a find is
+      #     more robust than three hardcoded paths.
+      #
+      # Searches `target` at the REPO ROOT, not app/src-tauri/target: this
+      # is a Cargo workspace, so every member's artifacts land in the
+      # workspace root target dir. Looking under app/src-tauri/target failed
+      # on all three platforms while the CLI jobs — which already used the
+      # root target dir — succeeded in the same run.
       # shell: bash everywhere, including Windows, where the runner has Git
       # Bash — one step instead of a PowerShell variant.
       - name: Stage installers
@@ -83,7 +89,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging
-          find app/src-tauri/target -path '*/release/bundle/*' \
+          find target -path '*/release/bundle/*' \
             \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.dmg' \
                -o -name '*.AppImage' -o -name '*.deb' \) \
             -exec cp {} staging/ \;

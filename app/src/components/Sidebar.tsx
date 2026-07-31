@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { RuleView, ScanOutcome } from "../App";
 import type { Review, Verdict } from "../review";
 import { FindingsPanel } from "./FindingsPanel";
-import { RulesPanel } from "./Rulespanel";
+import { RulesPanel } from "./RulesPanel";
 
 interface Props {
   outcome: ScanOutcome | null;

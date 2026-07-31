@@ -9,7 +9,7 @@ import {
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
-import { Sidebar } from "./components/Sidebar.tsx";
+import { Sidebar } from "./components/Sidebar";
 import {
   DocumentView,
   type DocumentViewHandle,
@@ -146,21 +146,6 @@ function App() {
     setTextSize((cur) => stepTextSize(cur, direction));
   }, []);
 
-  // Global: "?" opens/closes the shortcuts panel regardless of whether a
-  // document is loaded. Deliberately separate from the review-key effect
-  // below, which is gated on having an open document — there's nothing
-  // document-specific about wanting to see the shortcut list.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key === "?") {
-        setHelpOpen((h) => !h);
-        e.preventDefault();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   /** True if it's safe to discard the session; asks the user when not. */
   const confirmDiscard = useCallback(async (): Promise<boolean> => {
@@ -308,6 +293,46 @@ function App() {
     }
   }, [outcome, confirmDiscard, refreshRules]);
 
+  // App-level shortcuts: no open document required. Separate from the
+  // review-key effect below, which is gated on having one — nothing about
+  // opening a file, loading rules, or flipping the theme depends on a
+  // document already being loaded. Ctrl+O in particular is most useful
+  // when nothing is open, which is exactly when the gated effect is dead.
+  //
+  // These duplicate accelerators already declared on the native menu.
+  // That's deliberate, not redundant: the menu accelerators do not fire —
+  // every shortcut that works in this app has a JS binding, and every one
+  // that doesn't, doesn't. Ctrl+S/E/D appeared to work only because they
+  // had a JS binding too. Binding here makes them work regardless of what
+  // the native menu does.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === "?") {
+        setHelpOpen((h) => !h);
+        e.preventDefault();
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey)) return;
+      switch (e.key) {
+        case "o":
+          e.preventDefault();
+          void browse();
+          break;
+        case "l":
+          e.preventDefault();
+          void loadRules();
+          break;
+        case "t":
+          e.preventDefault();
+          toggleTheme();
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [browse, loadRules]);
+
   const closeDocument = useCallback(async () => {
     if (!(await confirmDiscard())) return;
     await invoke("close_document");
@@ -417,7 +442,7 @@ function App() {
 
   // Keyboard doctrine: arrows walk, a/r decide, Shift+A/R decide-by-rule,
   // Ctrl+Z undo, Ctrl+F search, Ctrl+D preview, Ctrl+S save, Ctrl+E
-  // export. Review keys stay quiet in inputs.
+  // export, Ctrl+W close. Review keys stay quiet in inputs.
   useEffect(() => {
     if (!outcome || exportResult) return;
     function onKey(e: KeyboardEvent) {
@@ -429,6 +454,13 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === "d") {
         setViewMode((m) => (m === "before" ? "after" : "before"));
         e.preventDefault();
+        return;
+      }
+      // Gated rather than app-level: closing a document only means
+      // something when one is open.
+      if ((e.ctrlKey || e.metaKey) && e.key === "w") {
+        e.preventDefault();
+        void closeDocument();
         return;
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -486,7 +518,7 @@ function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [outcome, review.focused, exportResult, closeSearch, doSave, doExport]);
+  }, [outcome, review.focused, exportResult, closeSearch, doSave, doExport, closeDocument]);
 
   // Native drag-and-drop: Tauri surfaces real file paths, which the
   // browser's own drop events cannot do inside a webview.

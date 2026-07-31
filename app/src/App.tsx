@@ -9,7 +9,7 @@ import {
   save as saveDialog,
 } from "@tauri-apps/plugin-dialog";
 import { TopBar } from "./components/TopBar";
-import { Sidebar } from "./components/Sidebar";
+import { Sidebar } from "./components/Sidebar.tsx";
 import {
   DocumentView,
   type DocumentViewHandle,
@@ -74,6 +74,18 @@ export interface RulesOutcome {
   rescanned: ScanOutcome | null;
 }
 
+/// Mirrors the Rust RuleView: RuleInfo's fields flattened, plus where the
+/// rule came from. finding_group is Option<usize> in Rust, so it arrives
+/// as null rather than undefined when unset.
+export interface RuleView {
+  id: string;
+  name: string;
+  pattern: string;
+  validated: boolean;
+  finding_group: number | null;
+  source: "builtin" | "user";
+}
+
 export interface RulesInfo {
   path: string;
   count: number;
@@ -96,6 +108,7 @@ function App() {
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [review, setReview] = useState<Review>(emptyReview(0));
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
+  const [rules, setRules] = useState<RuleView[]>([]);
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("before");
   const [error, setError] = useState<string | null>(null);
@@ -236,6 +249,22 @@ function App() {
     [confirmDiscard],
   );
 
+  const refreshRules = useCallback(async () => {
+    try {
+      setRules(await invoke<RuleView[]>("list_rules"));
+    } catch (e) {
+      // Non-fatal: the rules panel just stays empty. Scanning and review
+      // don't depend on the frontend knowing the rule list.
+      console.error("could not list rules:", e);
+    }
+  }, []);
+
+  // The active rule set exists before any document does, so this loads on
+  // mount rather than waiting for a file.
+  useEffect(() => {
+    void refreshRules();
+  }, [refreshRules]);
+
   const browse = useCallback(async () => {
     const picked = await openDialog({ multiple: false, directory: false });
     if (typeof picked === "string") await loadPath(picked);
@@ -266,6 +295,7 @@ function App() {
       setError(null);
       const result = await invoke<RulesOutcome>("load_rules", { path: picked });
       setRulesInfo({ path: result.rules_path, count: result.rule_count });
+      void refreshRules();
       if (result.rescanned) {
         setOutcome(result.rescanned);
         setReview(emptyReview(result.rescanned.findings.length));
@@ -276,7 +306,7 @@ function App() {
     } catch (e) {
       setError(String(e));
     }
-  }, [outcome, confirmDiscard]);
+  }, [outcome, confirmDiscard, refreshRules]);
 
   const closeDocument = useCallback(async () => {
     if (!(await confirmDiscard())) return;
@@ -547,6 +577,8 @@ function App() {
           <Sidebar
             outcome={outcome}
             review={review}
+            rules={rules}
+            rulesPath={rulesInfo?.path ?? null}
             onFocus={setFocus}
             onDecide={decideOne}
             onDecideGroup={decideGroup}

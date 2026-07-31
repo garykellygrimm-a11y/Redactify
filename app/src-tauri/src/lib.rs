@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
     builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition, Finding,
-    Manifest, Rule,
+    Manifest, Rule, RuleInfo,
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -43,6 +44,13 @@ struct OpenDocument {
 /// (most-recent-first, capped — see RECENT_FILES_CAP).
 struct AppState {
     rules: Mutex<Vec<Rule>>,
+    /// Ids that came from a loaded rules file rather than the builtins.
+    /// Tracked separately because `rules` holds the MERGED set, where a
+    /// user rule with a builtin's id replaces it outright — so the merged
+    /// list alone can't say whether a given rule is a builtin or a user
+    /// override of one, and that's exactly the distinction the rules panel
+    /// needs to show.
+    user_rule_ids: Mutex<HashSet<String>>,
     document: Mutex<Option<OpenDocument>>,
     recent: Mutex<Vec<String>>,
 }
@@ -51,6 +59,7 @@ impl Default for AppState {
     fn default() -> Self {
         AppState {
             rules: Mutex::new(builtin_rules()),
+            user_rule_ids: Mutex::new(HashSet::new()),
             document: Mutex::new(None),
             recent: Mutex::new(Vec::new()),
         }
@@ -66,6 +75,18 @@ struct ExportOutcome {
     output_sha256: String,
     applied_count: usize,
     rejected_count: usize,
+}
+
+/// One rule as the UI sees it: the serializable core view, plus where it
+/// came from. `source` is flattened alongside the RuleInfo fields, so the
+/// frontend sees one flat object rather than a nested one.
+#[derive(Serialize)]
+struct RuleView {
+    #[serde(flatten)]
+    info: RuleInfo,
+    /// "builtin" or "user". A user rule sharing a builtin's id has
+    /// replaced it.
+    source: &'static str,
 }
 
 /// Result of loading a rules file: what's now active, and — if a document
@@ -313,8 +334,12 @@ fn open_file(
 #[tauri::command]
 fn load_rules(path: String, state: State<AppState>) -> Result<RulesOutcome, String> {
     let user = load_rules_file(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+    // Capture which ids the user supplied BEFORE merging — afterwards the
+    // two are indistinguishable.
+    let user_ids: HashSet<String> = user.iter().map(|r| r.id.clone()).collect();
     let merged = merge_rules(builtin_rules(), user);
     let rule_count = merged.len();
+    *state.user_rule_ids.lock().unwrap() = user_ids;
 
     let mut rules = state.rules.lock().unwrap();
     *rules = merged;
@@ -331,6 +356,26 @@ fn load_rules(path: String, state: State<AppState>) -> Result<RulesOutcome, Stri
         rule_count,
         rescanned,
     })
+}
+
+/// Every rule in the active set, for the rules panel. Independent of the
+/// open document: you can inspect and (later) edit rules with nothing
+/// loaded.
+#[tauri::command]
+fn list_rules(state: State<AppState>) -> Vec<RuleView> {
+    let rules = state.rules.lock().unwrap();
+    let user_ids = state.user_rule_ids.lock().unwrap();
+    rules
+        .iter()
+        .map(|rule| RuleView {
+            source: if user_ids.contains(&rule.id) {
+                "user"
+            } else {
+                "builtin"
+            },
+            info: rule.info(),
+        })
+        .collect()
 }
 
 /// Drop the held document — the "start over" verb behind File > Close.
@@ -405,6 +450,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_file,
             load_rules,
+            list_rules,
             close_document,
             export
         ])

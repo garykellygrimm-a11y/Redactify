@@ -4,7 +4,7 @@ use std::path::Path;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use regex::{Regex, RegexBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::RedactifyError;
@@ -49,7 +49,41 @@ pub struct Rule {
     pub finding_group: Option<usize>,
 }
 
+/// A serializable view of a [`Rule`].
+///
+/// [`Rule`] itself can't cross a serialization boundary: it holds a
+/// compiled `Regex` and, for some rules, a function pointer. This carries
+/// the parts a UI actually needs to display or edit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleInfo {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    /// True when the rule runs a real check beyond the pattern match —
+    /// Luhn, IBAN mod-97, Base58Check, the JWT header decode. Worth
+    /// surfacing: these rules are far less prone to false positives than
+    /// shape-only ones, and that's not visible from the pattern alone.
+    pub validated: bool,
+    /// Set when only a capture group becomes the finding rather than the
+    /// whole match (currently just db_connection_string, which matches a
+    /// whole connection string for precision but flags only the password).
+    pub finding_group: Option<usize>,
+}
+
 impl Rule {
+    /// Build the serializable view of this rule.
+    pub fn info(&self) -> RuleInfo {
+        RuleInfo {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            // as_str() gives back the exact pattern the Regex was compiled
+            // from, so this round-trips to the same rule.
+            pattern: self.pattern.as_str().to_string(),
+            validated: self.validator.is_some(),
+            finding_group: self.finding_group,
+        }
+    }
+
     /// Convenience constructor for builtins. `.expect()` is deliberate:
     /// these are OUR hardcoded patterns — if one doesn't compile, we want
     /// tests to explode immediately, not limp along silently missing a rule.

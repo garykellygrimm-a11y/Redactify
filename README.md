@@ -245,16 +245,24 @@ Shipped:
   detection rules including a Luhn-validated credit/debit card rule (22
   builtins total, up from 5), and automated version bumps and changelog
   generation via release-please
+- ✅ **v0.6.0** — `redactify verify`, which proves a manifest's account of a
+  redaction by regenerating the output from the original plus the recorded
+  decisions and comparing it byte-for-byte — catching a manifest edited
+  after the fact, which hash checks alone cannot. `redactify batch` for
+  scanning many files and directories in parallel. Eight more detection
+  rules (30 builtins total, up from 22), four of them checksum-validated:
+  IBAN, US bank routing number, Canadian SIN, and Bitcoin address. Capture-
+  group support on `Rule`, and a database-connection-string rule built on it
+  that flags only the embedded credential. Release automation moved from
+  release-please to Knope, and the app and CLI now version independently.
+
+Since v0.6.0 the desktop app and the CLI carry separate version numbers — a
+change to one no longer forces a release of the other, and each ships its own
+GitHub release. The milestone numbers below track the desktop app; the CLI
+moves at its own pace.
 
 Planned:
 
-- ⬜ **v0.6 — Verification.** A `redactify verify` command that takes an
-  original file, its redacted output, and the manifest, and confirms the
-  chain: hashes match, every finding is accounted for, nothing was altered
-  after the fact. Batch processing. Checksum-validated detection rules —
-  IBAN, US bank routing number, Canadian SIN. Capture-group support on
-  `Rule`, and a database-connection-string rule built on it that redacts
-  just the embedded credential rather than the whole connection string.
 - ⬜ **v0.7 — Rule authoring in the app.** A rule editor with live match
   highlighting against the open document, a block-based builder for people
   who would rather not write regex by hand, and select-to-suggest: highlight

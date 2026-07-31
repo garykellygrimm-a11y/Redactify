@@ -111,6 +111,26 @@ impl Rule {
         }
     }
 
+    /// Both mechanisms at once: capture group `group` becomes the finding,
+    /// and `validator` gets the final say. ipv6 needs both — a guard
+    /// character consumed to stand in for the lookbehind Rust's regex
+    /// engine lacks, plus a structural check the pattern can't express.
+    fn with_group_and_validator(
+        id: &str,
+        name: &str,
+        pattern: &str,
+        group: usize,
+        validator: fn(&str) -> bool,
+    ) -> Rule {
+        Rule {
+            id: id.to_string(),
+            name: name.to_string(),
+            pattern: Regex::new(pattern).expect("builtin pattern must compile"),
+            validator: Some(validator),
+            finding_group: Some(group),
+        }
+    }
+
     /// Like `new`, but only capture group `group` becomes the finding,
     /// not the whole match. Use when precision genuinely requires
     /// context the finding itself shouldn't include — e.g. matching a
@@ -148,10 +168,22 @@ pub fn builtin_rules() -> Vec<Rule> {
         Rule::new("ssn", "US Social Security Number", r"\b\d{3}-\d{2}-\d{4}\b"),
         // US phone: parenthesized area code is an explicit alternative so
         // the match anchors at '(' — \b cannot sit between space and paren.
+        //
+        // Separators are REQUIRED between groups, not optional. When they
+        // were optional this matched any bare run of ten digits, which in
+        // a log file means every millisecond timestamp and integer
+        // constant: 6,066 hits across loghub's 16 sample corpora, none of
+        // them phone numbers. Requiring formatting takes that to zero.
+        //
+        // The deliberate cost: an unformatted 5551234567 no longer
+        // matches. That is real recall given up, and it is the right
+        // trade — a bare ten-digit number is genuinely indistinguishable
+        // from a timestamp, a PID, or a lock id, so matching it produced
+        // far more noise than signal.
         Rule::new(
             "us_phone",
             "US Phone Number",
-            r"(?:\+?1[-. ]?)?(?:\(\d{3}\)|\b\d{3})[-. ]?\d{3}[-. ]?\d{4}\b",
+            r"(?:\+?1[-. ])?(?:\(\d{3}\)[-. ]?|\b\d{3}[-. ])\d{3}[-. ]\d{4}\b",
         ),
         // AWS access key IDs: AKIA (long-term) or ASIA (temporary) + 16
         // uppercase alphanumerics.
@@ -292,22 +324,34 @@ pub fn builtin_rules() -> Vec<Rule> {
         // non-word characters — the same limitation already documented
         // on the us_phone rule above.
         //
-        // Known, accepted residual trade-off: a single hex-letter/digit
-        // "identifier" immediately followed by :: (e.g. the "d::" in
-        // "std::io") can still false-positive, since a genuine minimal
-        // leading group ("d::1") is structurally identical to that. Not
-        // fixable without lookahead or a validator hook on Rule (see
-        // the open Luhn-validation discussion — same underlying gap).
-        // Left liberal here, consistent with this project's existing
-        // policy of favoring recall over precision on shape-based rules.
-        Rule::new(
+        // The "std::io" trade-off previously accepted here is now fixed.
+        // Corpus measurement showed it was not a rare edge case: `::0` and
+        // `::1` from C++/Rust scope resolution (onTouchEvent::0,
+        // ICSITransaction::Commit) made up most of this rule's 437 hits
+        // across loghub's sample corpora.
+        //
+        // The guard is the leading (?:^|[^0-9A-Za-z_:]): a scope-resolution
+        // `::` is always preceded by an identifier character, a real
+        // address never is. Rust's regex has no lookbehind, so that
+        // character is consumed and the address captured in group 1 —
+        // the same finding_group mechanism db_connection_string uses.
+        // A newline satisfies the guard, so an address at the start of a
+        // line still matches; ^ only covers the very first byte.
+        //
+        // The validator handles what the pattern cannot: a hardware
+        // address like FF:F2:9F:16:E2:23:00:0D is eight colon-separated
+        // hex groups, structurally identical to full-form IPv6.
+        Rule::with_group_and_validator(
             "ipv6",
             "IPv6 Address",
             concat!(
+                r"(?:^|[^0-9A-Za-z_:])(",
                 r"(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){7}",
                 r"|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?",
-                r"|:(?::[0-9a-fA-F]{1,4}){1,7})",
+                r"|:(?::[0-9a-fA-F]{1,4}){1,7}))",
             ),
+            1,
+            ipv6_is_not_hardware_address,
         ),
         // OpenAI API key: sk- + a documented modern sub-prefix + random
         // suffix. Deliberately requires one of the three current
@@ -352,7 +396,13 @@ pub fn builtin_rules() -> Vec<Rule> {
         Rule::with_validator(
             "credit_card",
             "Credit/Debit Card Number",
-            r"\b\d(?:[ -]?\d){12,18}\b",
+            concat!(
+                r"\b(?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12}",
+                r"|2(?:2[2-9]|[3-6]\d|7[01])\d{12}|2720\d{12}",
+                r"|4\d{3}[ -]\d{4}[ -]\d{4}[ -]\d{4}",
+                r"|5[1-5]\d{2}[ -]\d{4}[ -]\d{4}[ -]\d{4}",
+                r"|3[47]\d{2}[ -]\d{6}[ -]\d{5})\b",
+            ),
             luhn_valid,
         ),
         // JSON Web Token: header.payload.signature, each base64url (RFC
@@ -520,6 +570,21 @@ fn canadian_sin_is_valid(matched: &str) -> bool {
         return false;
     }
     luhn_checksum_valid(&digits)
+}
+
+/// Reject MAC/EUI-64 hardware addresses, which are colon-separated hex
+/// just like IPv6 and so match the full-form branch exactly.
+///
+/// The tell is uniformity: a hardware address is always eight groups of
+/// exactly two hex digits, whereas real full-form IPv6 has groups of
+/// varying width (2001:0db8:85a3:...). Anything containing "::" is
+/// compressed IPv6 and can't be a hardware address at all.
+fn ipv6_is_not_hardware_address(matched: &str) -> bool {
+    if matched.contains("::") {
+        return true;
+    }
+    let groups: Vec<&str> = matched.split(':').collect();
+    !(groups.len() == 8 && groups.iter().all(|g| g.len() == 2))
 }
 
 /// Decode the JWT's header segment and confirm it's valid JSON containing

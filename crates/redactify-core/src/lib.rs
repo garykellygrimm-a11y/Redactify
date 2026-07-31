@@ -601,6 +601,106 @@ mod tests {
         );
     }
 
+    // ---------- corpus regressions ----------
+    //
+    // Every fixture below is a real false positive found by running the
+    // builtin rules across loghub's 16 sample corpora
+    // (examples/corpus_scan.rs). Between them these three rules produced
+    // 7,239 of 16,693 total findings — 43% of everything the tool
+    // reported, none of it real.
+
+    #[test]
+    fn us_phone_ignores_bare_digit_runs() {
+        let rules = builtin_rules();
+        // Unix timestamps, an Android integer constant, a
+        // PowerManagerService lock id. 6,066 corpus hits, zero phones.
+        for text in [
+            "- 1117838570 2005.06.03 R02-M1-N0-C:J12-U11 RAS KERNEL",
+            "setWiredDeviceConnectionState type: -2147483632",
+            "acquire lock=233570404, flags=0x1",
+        ] {
+            assert!(
+                !detect(text, &rules).iter().any(|f| f.rule_id == "us_phone"),
+                "us_phone should not match a bare digit run: {text}"
+            );
+        }
+        // Formatted numbers are unaffected.
+        for text in [
+            "(555) 123-4567",
+            "(555)123-4567",
+            "555-123-4567",
+            "555.123.4567",
+            "555 123 4567",
+            "+1 555 123 4567",
+            "1-555-123-4567",
+        ] {
+            assert!(
+                detect(text, &rules).iter().any(|f| f.rule_id == "us_phone"),
+                "us_phone should still match: {text}"
+            );
+        }
+    }
+
+    #[test]
+    fn credit_card_does_not_span_log_fields() {
+        let rules = builtin_rules();
+        // A millisecond timestamp fragment plus two PIDs. This passes
+        // Luhn, so the checksum alone never caught it — the old pattern
+        // allowed an optional space between any two digits, letting a
+        // match wander across whitespace-separated fields.
+        for text in [
+            "03-17 16:14:20.108 23650 23685 V AudioManager: isMusicActive",
+            "03-17 16:14:22.502 28601 28601 V AudioManager: playSoundEffect",
+        ] {
+            assert!(
+                !detect(text, &rules).iter().any(|f| f.rule_id == "credit_card"),
+                "credit_card should not span log fields: {text}"
+            );
+        }
+        // Epoch-millisecond timestamps: right length, passes Luhn, but no
+        // issuer prefix. Grouping alone left 174 of these; requiring a
+        // real IIN removed them.
+        assert!(
+            !detect("createTime=1514038620000", &rules)
+                .iter()
+                .any(|f| f.rule_id == "credit_card"),
+            "credit_card should not match an epoch-ms timestamp"
+        );
+    }
+
+    #[test]
+    fn ipv6_ignores_scope_resolution_and_hardware_addresses() {
+        let rules = builtin_rules();
+        // C++/Rust scope resolution accounted for most of this rule's 437
+        // corpus hits. A scope-resolution :: is always preceded by an
+        // identifier character; a real address never is.
+        for text in [
+            "PanelView: onTouchEvent::0, x=271.0, y=14.0",
+            "ICSITransaction::Commit calling IStorePendingTransaction",
+            "std::io::Error returned",
+            "std::vector<int>::iterator it",
+            // Eight colon-separated hex groups — structurally identical
+            // to full-form IPv6, which is why this needs a validator
+            // rather than a pattern change.
+            "DISCOVERY FF:F2:9F:16:E2:23:00:0D",
+        ] {
+            assert!(
+                !detect(text, &rules).iter().any(|f| f.rule_id == "ipv6"),
+                "ipv6 should not match: {text}"
+            );
+        }
+
+        // Real addresses still detected, including at the very start of
+        // the text where the guard falls back to ^.
+        let start = detect("0:0:0:0:0:0:0:0 is the bind address", &rules);
+        assert!(
+            start.iter().any(|f| f.rule_id == "ipv6"),
+            "ipv6 should match a full-form address at position 0"
+        );
+        let mixed = detect("addr 2607:f140:6000:8:c6b3:1ff:fecd:467f up", &rules);
+        assert!(mixed.iter().any(|f| f.rule_id == "ipv6"));
+    }
+
     // ---------- the hard parts ----------
 
     #[test]

@@ -48,8 +48,7 @@ jobs:
           # "Input required and not supplied: token".
           #
           # The name predates both release-plz and release-please; it's kept
-          # as-is because GitHub won't reveal an existing secret's value, so
-          # renaming means regenerating a working PAT for no functional gain.
+          # as-is because GitHub won't reveal an existing secret's value.
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
       - uses: actions/setup-node@v7
@@ -95,10 +94,24 @@ jobs:
 
       - name: Prepare the release PR
         run: |
+          # Only that one error is swallowed; anything else still fails the
+          # job. Note that Knope aborts its whole workflow when
+          # PrepareRelease errors, so the commit/push/PR steps never run —
+          # nothing partial is left behind.
+          set +e
           if [ -n "${{ inputs.override_version }}" ]; then
-            knope prepare-release --verbose --override-version "${{ inputs.override_version }}"
+            output=$(knope prepare-release --verbose --override-version "${{ inputs.override_version }}" 2>&1)
           else
-            knope prepare-release --verbose
+            output=$(knope prepare-release --verbose 2>&1)
+          fi
+          status=$?
+          echo "$output"
+          if [ $status -ne 0 ]; then
+            if echo "$output" | grep -q "no_release"; then
+              echo "::notice::No packages have releasable changes — nothing to prepare."
+              exit 0
+            fi
+            exit $status
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

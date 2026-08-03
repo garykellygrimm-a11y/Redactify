@@ -1,162 +1,77 @@
-import { memo, useState } from "react";
-import type { ScanOutcome } from "../App";
+import { useState } from "react";
+import type { RuleView, ScanOutcome } from "../App";
 import type { Review, Verdict } from "../review";
-import { ruleHue } from "./DocumentView";
+import { FindingsPanel } from "./FindingsPanel";
+import { RulesPanel } from "./RulesPanel";
 
 interface Props {
   outcome: ScanOutcome | null;
   review: Review;
+  rules: RuleView[];
+  rulesPath: string | null;
   onFocus: (index: number) => void;
   onDecide: (index: number, verdict: Verdict) => void;
   onDecideGroup: (indices: number[], verdict: Verdict) => void;
 }
 
-const STATE_GLYPH = { pending: "·", accepted: "✓", rejected: "✕" } as const;
+type Tab = "findings" | "rules";
 
-// memo: App re-renders on every search keystroke; without this the
-// sidebar rebuilds its 30k-finding group structure per letter.
-export const Sidebar = memo(function Sidebar({
+/**
+ * Thin tab container. The panels live in their own files: FindingsPanel is
+ * memoized and expensive (it groups every finding on each render), while
+ * this shell is cheap and re-renders freely.
+ *
+ * Rules live here in the sidebar rather than in a modal on purpose. The
+ * editor arriving in the next stage highlights matches live in the open
+ * document, which means the pattern being edited and the document have to
+ * be visible at the same time — a full-screen modal like HelpPanel would
+ * cover exactly what you need to watch.
+ */
+export function Sidebar({
   outcome,
   review,
+  rules,
+  rulesPath,
   onFocus,
   onDecide,
   onDecideGroup,
 }: Props) {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-
-  if (!outcome) {
-    return (
-      <aside className="flex h-full flex-col overflow-y-auto bg-surface-raised">
-        <div className="border-b border-border px-4 py-3 text-sm font-medium">
-          Findings
-        </div>
-        <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted">
-          No file loaded yet.
-          <br />
-          Findings will appear here, grouped by rule.
-        </div>
-      </aside>
-    );
-  }
-
-  const ruleIds = [...new Set(outcome.findings.map((f) => f.rule_id))].sort();
-  const groups = ruleIds.map((id) => ({
-    id,
-    members: outcome.findings
-      .map((f, i) => ({ f, i }))
-      .filter(({ f }) => f.rule_id === id),
-  }));
+  const [tab, setTab] = useState<Tab>("findings");
 
   return (
-    <aside className="flex h-full flex-col overflow-y-auto bg-surface-raised">
-      <div className="border-b border-border px-4 py-3">
-        <div className="text-sm font-medium">
-          {outcome.findings.length} finding
-          {outcome.findings.length === 1 ? "" : "s"}
-        </div>
-        <div className="mt-0.5 text-xs text-muted">
-          {outcome.line_count.toLocaleString()} lines · {outcome.elapsed_ms} ms
-        </div>
+    <aside className="flex h-full flex-col bg-surface-raised">
+      <div className="flex shrink-0 border-b border-border">
+        {(["findings", "rules"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 px-4 py-2 text-sm capitalize ${
+              tab === t
+                ? "border-b-2 border-accent font-medium text-accent"
+                : "text-muted hover:bg-surface-sunken"
+            }`}
+          >
+            {t}
+            {t === "rules" && rules.length > 0 && (
+              <span className="ml-1.5 text-xs text-muted">{rules.length}</span>
+            )}
+          </button>
+        ))}
       </div>
-      <div className="p-2">
-        {groups.map(({ id, members }) => {
-          const indices = members.map(({ i }) => i);
-          const pendingCount = indices.filter(
-            (i) => review.states[i] === "pending",
-          ).length;
-          return (
-            <div key={id} className="mb-1">
-              <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-surface-sunken">
-                <button
-                  onClick={() => setOpen((o) => ({ ...o, [id]: !o[id] }))}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: `var(--rule-${ruleHue(id, ruleIds)})` }}
-                  />
-                  <span className="truncate font-mono text-[13px]">{id}</span>
-                  <span className="ml-auto text-muted">
-                    {pendingCount > 0 ? `${pendingCount} pending` : "done"}
-                  </span>
-                </button>
-                {pendingCount > 0 && (
-                  <span className="hidden shrink-0 gap-1 group-hover:flex">
-                    <button
-                      onClick={() => onDecideGroup(indices, "accepted")}
-                      className="rounded bg-accepted-soft px-1.5 text-xs text-accepted"
-                      title={`Accept all pending ${id}`}
-                    >
-                      ✓ all
-                    </button>
-                    <button
-                      onClick={() => onDecideGroup(indices, "rejected")}
-                      className="rounded bg-surface-sunken px-1.5 text-xs text-rejected"
-                      title={`Reject all pending ${id}`}
-                    >
-                      ✕ all
-                    </button>
-                  </span>
-                )}
-              </div>
-              {open[id] && (
-                <ul className="ml-3 mt-0.5 border-l border-border pl-3">
-                  {members.map(({ f, i }) => {
-                    const state = review.states[i];
-                    return (
-                      <li key={i} className="group/item flex items-center gap-1">
-                        <button
-                          onClick={() => onFocus(i)}
-                          className={`min-w-0 flex-1 truncate rounded px-2 py-1 text-left font-mono text-xs hover:bg-surface-sunken ${
-                            i === review.focused
-                              ? "bg-accent-soft text-accent"
-                              : state === "pending"
-                                ? "text-text"
-                                : "text-muted"
-                          }`}
-                          title={f.matched}
-                        >
-                          <span
-                            className={
-                              state === "accepted"
-                                ? "text-accepted"
-                                : state === "rejected"
-                                  ? "text-rejected"
-                                  : "text-pending"
-                            }
-                          >
-                            {STATE_GLYPH[state]}
-                          </span>{" "}
-                          {f.matched}
-                        </button>
-                        <span className="hidden shrink-0 gap-1 group-hover/item:flex">
-                          <button
-                            onClick={() => onDecide(i, "accepted")}
-                            className="rounded px-1 text-xs text-accepted hover:bg-accepted-soft"
-                            title="Accept (a)"
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={() => onDecide(i, "rejected")}
-                            className="rounded px-1 text-xs text-rejected hover:bg-surface-sunken"
-                            title="Reject (r)"
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="border-t border-border px-4 py-2 text-[11px] text-muted">
-        ↑/↓ walk · a accept · r reject · Shift+A/R whole rule · Ctrl+Z undo
+
+      <div className="min-h-0 flex-1">
+        {tab === "findings" ? (
+          <FindingsPanel
+            outcome={outcome}
+            review={review}
+            onFocus={onFocus}
+            onDecide={onDecide}
+            onDecideGroup={onDecideGroup}
+          />
+        ) : (
+          <RulesPanel rules={rules} rulesPath={rulesPath} />
+        )}
       </div>
     </aside>
   );
-});
+}

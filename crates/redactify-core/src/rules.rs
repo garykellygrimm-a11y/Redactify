@@ -4,7 +4,7 @@ use std::path::Path;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use regex::{Regex, RegexBuilder};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::RedactifyError;
@@ -49,7 +49,41 @@ pub struct Rule {
     pub finding_group: Option<usize>,
 }
 
+/// A serializable view of a [`Rule`].
+///
+/// [`Rule`] itself can't cross a serialization boundary: it holds a
+/// compiled `Regex` and, for some rules, a function pointer. This carries
+/// the parts a UI actually needs to display or edit.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RuleInfo {
+    pub id: String,
+    pub name: String,
+    pub pattern: String,
+    /// True when the rule runs a real check beyond the pattern match —
+    /// Luhn, IBAN mod-97, Base58Check, the JWT header decode. Worth
+    /// surfacing: these rules are far less prone to false positives than
+    /// shape-only ones, and that's not visible from the pattern alone.
+    pub validated: bool,
+    /// Set when only a capture group becomes the finding rather than the
+    /// whole match (currently just db_connection_string, which matches a
+    /// whole connection string for precision but flags only the password).
+    pub finding_group: Option<usize>,
+}
+
 impl Rule {
+    /// Build the serializable view of this rule.
+    pub fn info(&self) -> RuleInfo {
+        RuleInfo {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            // as_str() gives back the exact pattern the Regex was compiled
+            // from, so this round-trips to the same rule.
+            pattern: self.pattern.as_str().to_string(),
+            validated: self.validator.is_some(),
+            finding_group: self.finding_group,
+        }
+    }
+
     /// Convenience constructor for builtins. `.expect()` is deliberate:
     /// these are OUR hardcoded patterns — if one doesn't compile, we want
     /// tests to explode immediately, not limp along silently missing a rule.
@@ -74,6 +108,26 @@ impl Rule {
             pattern: Regex::new(pattern).expect("builtin pattern must compile"),
             validator: Some(validator),
             finding_group: None,
+        }
+    }
+
+    /// Both mechanisms at once: capture group `group` becomes the finding,
+    /// and `validator` gets the final say. ipv6 needs both — a guard
+    /// character consumed to stand in for the lookbehind Rust's regex
+    /// engine lacks, plus a structural check the pattern can't express.
+    fn with_group_and_validator(
+        id: &str,
+        name: &str,
+        pattern: &str,
+        group: usize,
+        validator: fn(&str) -> bool,
+    ) -> Rule {
+        Rule {
+            id: id.to_string(),
+            name: name.to_string(),
+            pattern: Regex::new(pattern).expect("builtin pattern must compile"),
+            validator: Some(validator),
+            finding_group: Some(group),
         }
     }
 
@@ -114,10 +168,22 @@ pub fn builtin_rules() -> Vec<Rule> {
         Rule::new("ssn", "US Social Security Number", r"\b\d{3}-\d{2}-\d{4}\b"),
         // US phone: parenthesized area code is an explicit alternative so
         // the match anchors at '(' — \b cannot sit between space and paren.
+        //
+        // Separators are REQUIRED between groups, not optional. When they
+        // were optional this matched any bare run of ten digits, which in
+        // a log file means every millisecond timestamp and integer
+        // constant: 6,066 hits across loghub's 16 sample corpora, none of
+        // them phone numbers. Requiring formatting takes that to zero.
+        //
+        // The deliberate cost: an unformatted 5551234567 no longer
+        // matches. That is real recall given up, and it is the right
+        // trade — a bare ten-digit number is genuinely indistinguishable
+        // from a timestamp, a PID, or a lock id, so matching it produced
+        // far more noise than signal.
         Rule::new(
             "us_phone",
             "US Phone Number",
-            r"(?:\+?1[-. ]?)?(?:\(\d{3}\)|\b\d{3})[-. ]?\d{3}[-. ]?\d{4}\b",
+            r"(?:\+?1[-. ])?(?:\(\d{3}\)[-. ]?|\b\d{3}[-. ])\d{3}[-. ]\d{4}\b",
         ),
         // AWS access key IDs: AKIA (long-term) or ASIA (temporary) + 16
         // uppercase alphanumerics.
@@ -258,22 +324,34 @@ pub fn builtin_rules() -> Vec<Rule> {
         // non-word characters — the same limitation already documented
         // on the us_phone rule above.
         //
-        // Known, accepted residual trade-off: a single hex-letter/digit
-        // "identifier" immediately followed by :: (e.g. the "d::" in
-        // "std::io") can still false-positive, since a genuine minimal
-        // leading group ("d::1") is structurally identical to that. Not
-        // fixable without lookahead or a validator hook on Rule (see
-        // the open Luhn-validation discussion — same underlying gap).
-        // Left liberal here, consistent with this project's existing
-        // policy of favoring recall over precision on shape-based rules.
-        Rule::new(
+        // The "std::io" trade-off previously accepted here is now fixed.
+        // Corpus measurement showed it was not a rare edge case: `::0` and
+        // `::1` from C++/Rust scope resolution (onTouchEvent::0,
+        // ICSITransaction::Commit) made up most of this rule's 437 hits
+        // across loghub's sample corpora.
+        //
+        // The guard is the leading (?:^|[^0-9A-Za-z_:]): a scope-resolution
+        // `::` is always preceded by an identifier character, a real
+        // address never is. Rust's regex has no lookbehind, so that
+        // character is consumed and the address captured in group 1 —
+        // the same finding_group mechanism db_connection_string uses.
+        // A newline satisfies the guard, so an address at the start of a
+        // line still matches; ^ only covers the very first byte.
+        //
+        // The validator handles what the pattern cannot: a hardware
+        // address like FF:F2:9F:16:E2:23:00:0D is eight colon-separated
+        // hex groups, structurally identical to full-form IPv6.
+        Rule::with_group_and_validator(
             "ipv6",
             "IPv6 Address",
             concat!(
+                r"(?:^|[^0-9A-Za-z_:])(",
                 r"(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){7}",
                 r"|[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6}::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?",
-                r"|:(?::[0-9a-fA-F]{1,4}){1,7})",
+                r"|:(?::[0-9a-fA-F]{1,4}){1,7}))",
             ),
+            1,
+            ipv6_is_not_hardware_address,
         ),
         // OpenAI API key: sk- + a documented modern sub-prefix + random
         // suffix. Deliberately requires one of the three current
@@ -318,7 +396,13 @@ pub fn builtin_rules() -> Vec<Rule> {
         Rule::with_validator(
             "credit_card",
             "Credit/Debit Card Number",
-            r"\b\d(?:[ -]?\d){12,18}\b",
+            concat!(
+                r"\b(?:4\d{12}(?:\d{3})?|5[1-5]\d{14}|3[47]\d{13}|6(?:011|5\d{2})\d{12}",
+                r"|2(?:2[2-9]|[3-6]\d|7[01])\d{12}|2720\d{12}",
+                r"|4\d{3}[ -]\d{4}[ -]\d{4}[ -]\d{4}",
+                r"|5[1-5]\d{2}[ -]\d{4}[ -]\d{4}[ -]\d{4}",
+                r"|3[47]\d{2}[ -]\d{6}[ -]\d{5})\b",
+            ),
             luhn_valid,
         ),
         // JSON Web Token: header.payload.signature, each base64url (RFC
@@ -486,6 +570,21 @@ fn canadian_sin_is_valid(matched: &str) -> bool {
         return false;
     }
     luhn_checksum_valid(&digits)
+}
+
+/// Reject MAC/EUI-64 hardware addresses, which are colon-separated hex
+/// just like IPv6 and so match the full-form branch exactly.
+///
+/// The tell is uniformity: a hardware address is always eight groups of
+/// exactly two hex digits, whereas real full-form IPv6 has groups of
+/// varying width (2001:0db8:85a3:...). Anything containing "::" is
+/// compressed IPv6 and can't be a hardware address at all.
+fn ipv6_is_not_hardware_address(matched: &str) -> bool {
+    if matched.contains("::") {
+        return true;
+    }
+    let groups: Vec<&str> = matched.split(':').collect();
+    !(groups.len() == 8 && groups.iter().all(|g| g.len() == 2))
 }
 
 /// Decode the JWT's header segment and confirm it's valid JSON containing

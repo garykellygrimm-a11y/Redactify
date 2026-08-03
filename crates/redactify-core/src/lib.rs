@@ -653,9 +653,7 @@ mod tests {
             "03-17 16:14:22.502 28601 28601 V AudioManager: playSoundEffect",
         ] {
             assert!(
-                !detect(text, &rules)
-                    .iter()
-                    .any(|f| f.rule_id == "credit_card"),
+                !detect(text, &rules).iter().any(|f| f.rule_id == "credit_card"),
                 "credit_card should not span log fields: {text}"
             );
         }

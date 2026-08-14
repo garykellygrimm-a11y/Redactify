@@ -1,27 +1,45 @@
 name: Release
 
-# Runs when the `chore/release` PR merges. Builds every artifact, then
-# hands them to Knope's Release step, which creates each release as a
-# draft, uploads its assets, and publishes — so subscribers aren't
-# notified until the installers are actually attached.
-#
-# Also manually dispatchable, because a platform build failing partway
-# through is a normal thing that needs retrying without re-merging
-# anything.
-#
-# One release per cycle, tagged vX.Y.Z, carrying both the desktop
-# installers and the CLI archives. The app and CLI share a version, so
-# they share a release page and a changelog.
-
+# Releases when main carries a version that has no tag yet. Keyed to that
+# rather than to the release PR closing, which never reliably fired.
+# One release per version, carrying both installers and CLI archives.
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Does the current version still need releasing?
+        id: check
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -m1 '^version' app/src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          if [ -z "$VERSION" ]; then
+            echo "could not read a version from app/src-tauri/Cargo.toml" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "v${VERSION} is already tagged — nothing to release."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "v${VERSION} has no tag — releasing."
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-app:
-    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
+    needs: check
+    if: needs.check.outputs.needed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -58,31 +76,16 @@ jobs:
         run: npm install
         working-directory: app
 
-      # No tagName/releaseName: this only BUILDS. Knope owns release
-      # creation now, so tauri-action must not create one of its own.
+      # No tagName: build only. Knope creates the release.
       - name: Build the desktop app
         uses: tauri-apps/tauri-action@v1
         with:
           projectPath: app
           args: ${{ matrix.args }}
 
-      # Flatten the bundles into one directory. Two reasons this exists
-      # rather than uploading the bundle paths directly:
-      #   - upload-artifact preserves directory structure relative to the
-      #     common ancestor of what it matches, so installers would arrive
-      #     nested under nsis/, dmg/, deb/ etc. A `*` glob doesn't cross
-      #     directory separators, so knope.toml's asset glob would miss them.
-      #   - Tauri's output layout differs per platform (macOS universal
-      #     builds land under target/universal-apple-darwin/), so a find is
-      #     more robust than three hardcoded paths.
-      #
-      # Searches `target` at the REPO ROOT, not app/src-tauri/target: this
-      # is a Cargo workspace, so every member's artifacts land in the
-      # workspace root target dir. Looking under app/src-tauri/target failed
-      # on all three platforms while the CLI jobs — which already used the
-      # root target dir — succeeded in the same run.
-      # shell: bash everywhere, including Windows, where the runner has Git
-      # Bash — one step instead of a PowerShell variant.
+      # Flattened so knope.toml's `artifacts/*` glob matches — upload-artifact
+      # otherwise preserves the nsis/ dmg/ deb/ nesting, which `*` won't cross.
+      # Searches the workspace root target dir, not app/src-tauri/target.
       - name: Stage installers
         shell: bash
         run: |
@@ -93,8 +96,7 @@ jobs:
                -o -name '*.AppImage' -o -name '*.deb' \) \
             -exec cp {} staging/ \;
           ls -la staging
-          # Guard against silently shipping an empty release if Tauri's
-          # output layout ever changes.
+          # Fail loudly rather than ship an empty release.
           [ -n "$(ls -A staging)" ] || { echo "no installers found to stage" >&2; exit 1; }
 
       - uses: actions/upload-artifact@v4
@@ -104,7 +106,8 @@ jobs:
           if-no-files-found: error
 
   build-cli:
-    if: (github.head_ref == 'chore/release' && github.event.pull_request.merged == true) || github.event_name == 'workflow_dispatch'
+    needs: check
+    if: needs.check.outputs.needed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -113,8 +116,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact: redactify-cli.exe
             archive: redactify-cli-windows-x64.zip
-            # Fully static CRT: the binary runs on a bare Windows box
-            # with zero dependencies — the air-gap story, delivered.
+            # Static CRT: runs on a bare Windows box with no dependencies.
             rustflags: "-C target-feature=+crt-static"
           - platform: macos-latest
             target: aarch64-apple-darwin
@@ -163,7 +165,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [build-app, build-cli]
+    needs: [check, build-app, build-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -171,14 +173,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: main
-          # Tags needed: Release creates a release for any package whose
-          # current version doesn't match its latest version tag, so it has
-          # to be able to see those tags.
           fetch-depth: 0
 
-      # One flat directory now that the app and CLI share a release —
-      # matches the single artifacts/* asset glob in knope.toml.
-      # merge-multiple flattens every matrix job's upload into it.
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -187,22 +183,9 @@ jobs:
       - name: Show what will be uploaded
         run: ls -la artifacts
 
-      # Installed by direct download rather than knope-dev/action@v2.1.0.
-      # That action resolves the release asset with a "*linux*" style glob,
-      # which now matches BOTH knope-aarch64-unknown-linux-musl.tgz and
-      # knope-x86_64-unknown-linux-musl.tgz — it then hands both names to
-      # tar as one filename and dies. Knope's own manual install docs have
-      # the same flaw. Naming the exact asset sidesteps it, and the version
-      # stays pinned in one obvious place.
-      #
-      # Note the "knope/" segment in the URL: Knope's own repo is a
-      # monorepo and tags its releases knope/v0.22.4, not v0.22.4 — the
-      # same tagging scheme this repo is adopting. Verified: the URL below
-      # resolves, extracts to knope-x86_64-unknown-linux-musl/knope, and
-      # reports "knope 0.22.4".
-      #
-      # Extracted under /tmp so the archive and its contents never land in
-      # the checkout.
+      # Direct download, not knope-dev/action — its asset glob matches both
+      # the aarch64 and x86_64 tarballs and feeds both to tar. Note the
+      # "knope/" path segment: their repo tags releases knope/vX.Y.Z.
       - name: Install Knope
         env:
           KNOPE_VERSION: "0.22.4"

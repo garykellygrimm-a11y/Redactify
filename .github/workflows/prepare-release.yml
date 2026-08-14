@@ -1,22 +1,12 @@
 name: Prepare Release
 
-# Runs on every push to main and keeps a single open release PR
-# (`chore/release`) current: bumped versions, per-package changelogs, and
-# the aggregated root CHANGELOG.md. Merging that PR is what triggers
-# release.yml.
-#
-# The `if` guard is load-bearing: when the release PR itself merges, the
-# squashed commit message is "chore: prepare release". Without the guard
-# this workflow would immediately re-run on its own merge and try to
-# prepare a release of the release.
+# Keeps a single open `chore/release` PR current with the next version
+# and changelog. Merging it is what releases.
 
 on:
   push:
     branches: [main]
-  # Manual trigger for the retry case: a run that computed the wrong
-  # version (missing changeset, say) can be redone with an explicit
-  # override rather than needing a no-op commit pushed to main just to
-  # re-trigger the workflow.
+  # Manual trigger with an explicit override, for redoing a bad run.
   workflow_dispatch:
     inputs:
       override_version:
@@ -31,46 +21,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Full history AND tags. Knope reads the last package version tag
-          # (redactify-app/v0.5.0, redactify-cli/v0.5.0) to decide where to
-          # start counting commits — a shallow clone would make it think
-          # nothing has ever been released.
+          # Knope reads the last version tag to decide where to start.
           fetch-depth: 0
-          # PAT rather than GITHUB_TOKEN: a branch pushed with GITHUB_TOKEN
-          # doesn't trigger workflows, so ci.yml/audit.yml/codeql.yml would
-          # never report on the release PR and required checks would block
-          # the merge forever.
-          #
-          # Needs Contents, Pull requests, and Workflows all set to
-          # read/write. If the secret name is wrong or missing, the
-          # reference resolves to an empty string, which overrides
-          # checkout's default token and fails with the confusing
-          # "Input required and not supplied: token".
-          #
-          # The name predates both release-plz and release-please; it's kept
-          # as-is because GitHub won't reveal an existing secret's value.
+          # PAT, not GITHUB_TOKEN — pushes with the latter don't trigger the
+          # PR's required checks. Needs Contents, Pull requests, Workflows.
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
       - uses: actions/setup-node@v7
         with:
           node-version: lts/*
 
-      # Installed by direct download rather than knope-dev/action@v2.1.0.
-      # That action resolves the release asset with a "*linux*" style glob,
-      # which now matches BOTH knope-aarch64-unknown-linux-musl.tgz and
-      # knope-x86_64-unknown-linux-musl.tgz — it then hands both names to
-      # tar as one filename and dies. Knope's own manual install docs have
-      # the same flaw. Naming the exact asset sidesteps it, and the version
-      # stays pinned in one obvious place.
-      #
-      # Note the "knope/" segment in the URL: Knope's own repo is a
-      # monorepo and tags its releases knope/v0.22.4, not v0.22.4 — the
-      # same tagging scheme this repo is adopting. Verified: the URL below
-      # resolves, extracts to knope-x86_64-unknown-linux-musl/knope, and
-      # reports "knope 0.22.4".
-      #
-      # Extracted under /tmp so the archive and its contents never land in
-      # the checkout.
+      # Direct download, not knope-dev/action — its asset glob matches both
+      # the aarch64 and x86_64 tarballs and feeds both to tar. Note the
+      # "knope/" path segment: their repo tags releases knope/vX.Y.Z.
       - name: Install Knope
         env:
           KNOPE_VERSION: "0.22.4"

@@ -25,16 +25,16 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4.37.3
+        uses: github/codeql-action/init@v4.37.6
         with:
           languages: ${{ matrix.language }}
           queries: security-extended,security-and-quality
 
       - name: Autobuild Engine
-        uses: github/codeql-action/autobuild@v4.37.3
+        uses: github/codeql-action/autobuild@v4.37.6
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4.37.3
+        uses: github/codeql-action/analyze@v4.37.6
         with:
           category: "/language:${{matrix.language}}"
 
@@ -114,13 +114,13 @@ jobs:
           head -c 200 stylelint-results.sarif || true
 
       - name: Upload HTML Security Findings
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.6
         with:
           sarif_file: htmlhint-results.sarif
           category: htmlhint
 
       - name: Upload CSS Security Findings
-        uses: github/codeql-action/upload-sarif@v4.37.3
+        uses: github/codeql-action/upload-sarif@v4.37.6
         with:
           sarif_file: stylelint-results.sarif
           category: stylelint

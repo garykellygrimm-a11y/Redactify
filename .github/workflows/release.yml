@@ -9,10 +9,9 @@ name: Release
 # through is a normal thing that needs retrying without re-merging
 # anything.
 #
-# Two releases come out of this, not one: redactify-app/vX.Y.Z carrying
-# installers, and redactify-cli/vX.Y.Z carrying binaries. That's the
-# consequence of independent versioning — they no longer share a version,
-# so they can't share a release.
+# One release per cycle, tagged vX.Y.Z, carrying both the desktop
+# installers and the CLI archives. The app and CLI share a version, so
+# they share a release page and a changelog.
 
 on:
   pull_request:
@@ -98,7 +97,7 @@ jobs:
           # output layout ever changes.
           [ -n "$(ls -A staging)" ] || { echo "no installers found to stage" >&2; exit 1; }
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: app-${{ matrix.platform }}
           path: staging/*
@@ -155,7 +154,7 @@ jobs:
           tar -czf "${{ matrix.archive }}" -C "target/${{ matrix.target }}/release" "${{ matrix.artifact }}"
           shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.platform }}
           path: |
@@ -177,26 +176,16 @@ jobs:
           # to be able to see those tags.
           fetch-depth: 0
 
-      # Downloaded into SEPARATE directories, matching the per-package
-      # asset globs in knope.toml (artifacts/app/* and artifacts/cli/*).
-      # merge-multiple flattens each matrix job's upload within its own
-      # directory; the `pattern` filter is what keeps app and CLI apart.
+      # One flat directory now that the app and CLI share a release —
+      # matches the single artifacts/* asset glob in knope.toml.
+      # merge-multiple flattens every matrix job's upload into it.
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts/app
-          pattern: app-*
-          merge-multiple: true
-
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts/cli
-          pattern: cli-*
+          path: artifacts
           merge-multiple: true
 
       - name: Show what will be uploaded
-        run: |
-          echo "--- app ---"; ls -la artifacts/app
-          echo "--- cli ---"; ls -la artifacts/cli
+        run: ls -la artifacts
 
       # Installed by direct download rather than knope-dev/action@v2.1.0.
       # That action resolves the release asset with a "*linux*" style glob,

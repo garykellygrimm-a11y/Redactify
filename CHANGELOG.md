@@ -5,71 +5,49 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Redactify ships as two independently versioned packages: the desktop app and
-the CLI. The entries below are aggregated automatically from
-`app/CHANGELOG.md` and `crates/redactify-cli/CHANGELOG.md` — edit those, not
-the generated region here.
+Redactify ships as one product: the desktop app and the CLI share a version
+number and a release. Entries below are written by Knope from conventional
+commits and changesets.
 
-<!-- BEGIN GENERATED CHANGELOG -->
+## 0.6.1 (2026-08-03)
 
-## Desktop App 0.6.1 (2026-08-03)
+### Added
 
-### Features
+- Rules panel in the sidebar, listing every active rule with its origin,
+  pattern, and whether it is checksum-validated
 
-- rules panel, menu shortcut fixes, and rule false-positive fixes (#118)
+### Fixed
 
-### Fixes
+- Ctrl+O, Ctrl+L, Ctrl+W and Ctrl+T did nothing — the native menu
+  accelerators never fired, and only shortcuts that also had a JS binding
+  worked
+- Three detection rules produced 43% of all findings on real log files and
+  none of them were real: `us_phone` matched any bare ten-digit run,
+  `credit_card` matched across whitespace-separated log fields, and `ipv6`
+  matched C++/Rust scope resolution and hardware addresses
 
-- Rules panel, menu shortcut fixes, and three rule false positives eliminated.
+## 0.6.0 (2026-07-30)
 
-## CLI 0.6.1 (2026-08-03)
+### Added
 
-### Fixes
+- `redactify verify`, which proves a manifest's account of a redaction by
+  regenerating the output from the original plus the recorded decisions and
+  comparing byte-for-byte
+- `redactify batch` for scanning many files and directories in parallel
+- Eight more detection rules (30 builtins, up from 22), four of them
+  checksum-validated: IBAN, US bank routing number, Canadian SIN, and
+  Bitcoin address
+- Capture-group support on `Rule`, and a database-connection-string rule
+  built on it that flags only the embedded credential
 
-- Rules panel, menu shortcut fixes, and three rule false positives eliminated.
+### Changed
 
-## Desktop App 0.6.0 (2026-07-30)
+- **Breaking:** the CLI now requires an explicit subcommand.
+  `redactify file.txt -o out.txt` is now `redactify scan file.txt -o out.txt`
 
-### Breaking Changes
+### Fixed
 
-- Nine new detection rules, including checksum-validated ones
-
-### Features
-
-- add JWT, Bitcoin address, Discord webhook, Mailchimp key (#89)
-
-### Fixes
-
-- fix Canadian SIN checksum bug and a wrong test assertion (#91)
-
-## CLI 0.6.0 (2026-07-30)
-
-### Breaking Changes
-
-- the CLI now requires an explicit subcommand.
-`redactify file.txt -o out.txt` is now `redactify scan file.txt -o
-out.txt`. Introduced now rather than later since batch processing
-(also on the v0.6 list) will want the same subcommand structure —
-better to do this restructuring once.
-
-### Features
-
-- add redactify verify (#85)
-- add redactify batch (#87)
-- add JWT, Bitcoin address, Discord webhook, Mailchimp key (#89)
-
-### Fixes
-
-- fix Canadian SIN checksum bug and a wrong test assertion (#91)
-
-<!-- END GENERATED CHANGELOG -->
-
----
-
-## Unified releases (0.5.0 and earlier)
-
-Through 0.5.0 the app and CLI shared a single version number. These entries
-are frozen history and are not regenerated.
+- Canadian SIN checksum bug and a wrong test assertion
 
 ## [0.5.0] - 2026-07-25
 

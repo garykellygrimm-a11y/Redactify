@@ -99,7 +99,7 @@ jobs:
           # Fail loudly rather than ship an empty release.
           [ -n "$(ls -A staging)" ] || { echo "no installers found to stage" >&2; exit 1; }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: app-${{ matrix.platform }}
           path: staging/*
@@ -156,7 +156,7 @@ jobs:
           tar -czf "${{ matrix.archive }}" -C "target/${{ matrix.target }}/release" "${{ matrix.artifact }}"
           shasum -a 256 "${{ matrix.archive }}" > "${{ matrix.archive }}.sha256"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: cli-${{ matrix.platform }}
           path: |

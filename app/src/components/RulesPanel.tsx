@@ -74,7 +74,7 @@ export const RulesPanel = memo(function RulesPanel({
           onChange={(e) => onPreviewPatternChange(e.target.value)}
           placeholder={
             previewSyntax === "glob"
-              ? "*@navy.mil"
+              ? "*@google.com"
               : String.raw`\b\d{3}-\d{2}-\d{4}\b`
           }
           spellCheck={false}

@@ -1,9 +1,14 @@
 import { memo } from "react";
-import type { RuleView } from "../App";
+import type { PatternPreview, RuleView } from "../App";
 
 interface Props {
   rules: RuleView[];
   rulesPath: string | null;
+  previewPattern: string;
+  preview: PatternPreview | null;
+  previewError: string | null;
+  onPreviewPatternChange: (pattern: string) => void;
+  hasDocument: boolean;
 }
 
 /**
@@ -16,7 +21,15 @@ interface Props {
  * changes only when a rules file is loaded, so there's nothing to protect
  * against here.
  */
-export const RulesPanel = memo(function RulesPanel({ rules, rulesPath }: Props) {
+export const RulesPanel = memo(function RulesPanel({
+  rules,
+  rulesPath,
+  previewPattern,
+  preview,
+  previewError,
+  onPreviewPatternChange,
+  hasDocument,
+}: Props) {
   if (rules.length === 0) {
     return (
       <div className="flex h-full flex-col overflow-y-auto">
@@ -33,6 +46,37 @@ export const RulesPanel = memo(function RulesPanel({ rules, rulesPath }: Props) 
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
+      <div className="border-b border-border p-3">
+        <label className="mb-1 block text-xs font-medium text-muted">
+          Test a pattern
+        </label>
+        <input
+          value={previewPattern}
+          onChange={(e) => onPreviewPatternChange(e.target.value)}
+          placeholder={String.raw`\b\d{3}-\d{2}-\d{4}\b`}
+          spellCheck={false}
+          className="w-full rounded-md border border-border bg-surface-sunken px-2 py-1 font-mono text-xs outline-none focus:border-accent focus:ring-2 focus:ring-accent"
+        />
+        <div className="mt-1.5 min-h-4 text-xs">
+          {previewError ? (
+            <span className="text-pending">{previewError}</span>
+          ) : !previewPattern ? (
+            <span className="text-muted">
+              Matches highlight in the document as you type.
+            </span>
+          ) : !hasDocument ? (
+            <span className="text-muted">Open a document to see matches.</span>
+          ) : preview ? (
+            <span className={preview.match_count > 0 ? "text-accent" : "text-muted"}>
+              {preview.match_count} match{preview.match_count === 1 ? "" : "es"}
+              {preview.truncated && " (highlighting first 200 lines)"}
+            </span>
+          ) : (
+            <span className="text-muted">Checking…</span>
+          )}
+        </div>
+      </div>
+
       <div className="border-b border-border px-4 py-3">
         <div className="text-sm font-medium">
           {rules.length} rule{rules.length === 1 ? "" : "s"} active

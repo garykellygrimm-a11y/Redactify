@@ -86,6 +86,17 @@ export interface RuleView {
   source: "builtin" | "user";
 }
 
+export interface PreviewLine {
+  index: number;
+  segments: Segment[];
+}
+
+export interface PatternPreview {
+  match_count: number;
+  lines: PreviewLine[];
+  truncated: boolean;
+}
+
 export interface RulesInfo {
   path: string;
   count: number;
@@ -109,6 +120,9 @@ function App() {
   const [review, setReview] = useState<Review>(emptyReview(0));
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
   const [rules, setRules] = useState<RuleView[]>([]);
+  const [previewPattern, setPreviewPattern] = useState("");
+  const [preview, setPreview] = useState<PatternPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("before");
   const [error, setError] = useState<string | null>(null);
@@ -188,12 +202,8 @@ function App() {
     setCurrentMatch(matches.length > 0 ? 0 : -1);
   }, [matches]);
 
-  // Current-match row tint is now a plain prop on DocumentView (see
-  // currentSearchLine below) — cheap to re-render because virtualization
-  // means only the visible rows are ever mounted. Scrolling the match
-  // into view is the one thing that still has to happen imperatively,
-  // since the target row may not be mounted yet; scrollToLine drives the
-  // virtualizer directly instead of querying the DOM for it.
+  // Scrolling to a match must stay imperative — the target row may not be
+  // mounted.
   const documentViewRef = useRef<DocumentViewHandle>(null);
   useEffect(() => {
     if (currentMatch < 0) return;
@@ -250,6 +260,27 @@ function App() {
     void refreshRules();
   }, [refreshRules]);
 
+  // Debounced — each call rescans the whole document.
+  useEffect(() => {
+    if (previewPattern === "") {
+      setPreview(null);
+      setPreviewError(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      invoke<PatternPreview>("preview_pattern", { pattern: previewPattern })
+        .then((result) => {
+          setPreview(result);
+          setPreviewError(null);
+        })
+        .catch((e) => {
+          setPreview(null);
+          setPreviewError(String(e));
+        });
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [previewPattern, outcome]);
+
   const browse = useCallback(async () => {
     const picked = await openDialog({ multiple: false, directory: false });
     if (typeof picked === "string") await loadPath(picked);
@@ -293,18 +324,8 @@ function App() {
     }
   }, [outcome, confirmDiscard, refreshRules]);
 
-  // App-level shortcuts: no open document required. Separate from the
-  // review-key effect below, which is gated on having one — nothing about
-  // opening a file, loading rules, or flipping the theme depends on a
-  // document already being loaded. Ctrl+O in particular is most useful
-  // when nothing is open, which is exactly when the gated effect is dead.
-  //
-  // These duplicate accelerators already declared on the native menu.
-  // That's deliberate, not redundant: the menu accelerators do not fire —
-  // every shortcut that works in this app has a JS binding, and every one
-  // that doesn't, doesn't. Ctrl+S/E/D appeared to work only because they
-  // had a JS binding too. Binding here makes them work regardless of what
-  // the native menu does.
+  // App-level shortcuts, ungated: Ctrl+O is most useful with nothing open.
+  // Duplicated from the native menu accelerators, which never fire.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement) return;
@@ -346,11 +367,8 @@ function App() {
     void getCurrentWindow().setTitle("Redactify");
   }, [closeSearch, confirmDiscard]);
 
-  // Both Save and Export share the same rule the button already enforces
-  // visually (disabled until every finding is decided) — but a keyboard
-  // shortcut has no disabled state to respect, so the check has to live
-  // here too. Without it, Ctrl+S/Ctrl+E could write a file with pending
-  // findings silently treated as rejected.
+  // The pending check lives here too: a keyboard shortcut has no disabled
+  // state to respect.
   const doExport = useCallback(async () => {
     if (!outcome) return;
     const { pending } = tally(review);
@@ -611,6 +629,10 @@ function App() {
             review={review}
             rules={rules}
             rulesPath={rulesInfo?.path ?? null}
+            previewPattern={previewPattern}
+            preview={preview}
+            previewError={previewError}
+            onPreviewPatternChange={setPreviewPattern}
             onFocus={setFocus}
             onDecide={decideOne}
             onDecideGroup={decideGroup}
@@ -631,6 +653,7 @@ function App() {
             searchQuery={debouncedQuery}
             currentSearchLine={currentMatch >= 0 ? matches[currentMatch] : null}
             textSize={textSize}
+            preview={preview}
             onBrowse={browse}
           />
         </div>

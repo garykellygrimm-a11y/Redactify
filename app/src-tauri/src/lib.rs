@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
-    builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition, Finding,
-    Manifest, Rule, RuleInfo,
+    builtin_rules, compile_preview_rule, detect, load_rules_file, merge_rules, redact, sha256_hex,
+    Disposition, Finding, Manifest, Rule, RuleInfo,
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -44,12 +44,8 @@ struct OpenDocument {
 /// (most-recent-first, capped — see RECENT_FILES_CAP).
 struct AppState {
     rules: Mutex<Vec<Rule>>,
-    /// Ids that came from a loaded rules file rather than the builtins.
-    /// Tracked separately because `rules` holds the MERGED set, where a
-    /// user rule with a builtin's id replaces it outright — so the merged
-    /// list alone can't say whether a given rule is a builtin or a user
-    /// override of one, and that's exactly the distinction the rules panel
-    /// needs to show.
+    /// Tracked separately: `rules` holds the merged set, where a user rule
+    /// replaces a builtin of the same id.
     user_rule_ids: Mutex<HashSet<String>>,
     document: Mutex<Option<OpenDocument>>,
     recent: Mutex<Vec<String>>,
@@ -87,6 +83,20 @@ struct RuleView {
     /// "builtin" or "user". A user rule sharing a builtin's id has
     /// replaced it.
     source: &'static str,
+}
+
+#[derive(Serialize)]
+struct PreviewLine {
+    index: usize,
+    segments: Vec<Segment>,
+}
+
+#[derive(Serialize)]
+struct PatternPreview {
+    match_count: usize,
+    lines: Vec<PreviewLine>,
+    /// `match_count` stays exact when this is true.
+    truncated: bool,
 }
 
 /// Result of loading a rules file: what's now active, and — if a document
@@ -378,6 +388,52 @@ fn list_rules(state: State<AppState>) -> Vec<RuleView> {
         .collect()
 }
 
+const PREVIEW_LINE_CAP: usize = 200;
+
+/// Runs a candidate pattern against the open document without touching the
+/// session rule set. Size-capped, since it compiles whatever is typed.
+#[tauri::command]
+fn preview_pattern(pattern: String, state: State<AppState>) -> Result<PatternPreview, String> {
+    let empty = || PatternPreview {
+        match_count: 0,
+        lines: Vec::new(),
+        truncated: false,
+    };
+
+    if pattern.is_empty() {
+        return Ok(empty());
+    }
+
+    let rule = compile_preview_rule(&pattern).map_err(|e| e.to_string())?;
+
+    let guard = state.document.lock().unwrap();
+    let Some(doc) = guard.as_ref() else {
+        return Ok(empty());
+    };
+
+    let findings = detect(&doc.text, std::slice::from_ref(&rule));
+    let match_count = findings.len();
+
+    let mut lines = Vec::new();
+    let mut truncated = false;
+    for (index, segments) in segment(&doc.text, &findings).into_iter().enumerate() {
+        if !segments.iter().any(|s| s.finding.is_some()) {
+            continue;
+        }
+        if lines.len() >= PREVIEW_LINE_CAP {
+            truncated = true;
+            break;
+        }
+        lines.push(PreviewLine { index, segments });
+    }
+
+    Ok(PatternPreview {
+        match_count,
+        lines,
+        truncated,
+    })
+}
+
 /// Drop the held document — the "start over" verb behind File > Close.
 /// The active rule set survives; it is session state, not document state.
 #[tauri::command]
@@ -451,6 +507,7 @@ pub fn run() {
             open_file,
             load_rules,
             list_rules,
+            preview_pattern,
             close_document,
             export
         ])

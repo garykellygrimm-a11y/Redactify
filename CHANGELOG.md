@@ -9,6 +9,12 @@ Redactify ships as one product: the desktop app and the CLI share a version
 number and a release. Entries below are written by Knope from conventional
 commits and changesets.
 
+## 0.6.3 (2026-09-07)
+
+### Features
+
+- live match highlighting for candidate patterns
+
 ## 0.6.2 (2026-08-14)
 
 ### Fixes

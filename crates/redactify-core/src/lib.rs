@@ -7,7 +7,8 @@ pub use error::RedactifyError;
 pub use finding::Finding;
 pub use manifest::{Disposition, Manifest, ManifestFinding, sha256_hex};
 pub use rules::{
-    Rule, RuleInfo, builtin_rules, compile_preview_rule, load_rules_file, merge_rules,
+    Rule, RuleInfo, builtin_rules, compile_preview_rule, glob_to_regex, load_rules_file,
+    merge_rules,
 };
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,

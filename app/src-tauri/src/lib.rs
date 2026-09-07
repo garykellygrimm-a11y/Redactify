@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
-    builtin_rules, detect, load_rules_file, merge_rules, redact, sha256_hex, Disposition, Finding,
-    Manifest, Rule, RuleInfo, compile_preview_rule,
+    builtin_rules, compile_preview_rule, detect, load_rules_file, merge_rules, redact, sha256_hex,
+    Disposition, Finding, Manifest, Rule, RuleInfo,
 };
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};

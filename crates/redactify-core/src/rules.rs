@@ -27,16 +27,8 @@ pub struct Rule {
     /// Compiled regex. Note: Rust's `regex` crate has NO lookahead/lookbehind,
     /// so all patterns lean on `\b` word boundaries instead.
     pub pattern: Regex,
-    /// Optional post-match check: given the matched text, does it actually
-    /// look like a real instance of what this rule targets, beyond just
-    /// matching the shape? Exists for the small set of rules where a real
-    /// checksum (e.g. Luhn for card numbers) can cheaply rule out most
-    /// false positives that a shape-only regex can't distinguish — it
-    /// only ever runs on strings the regex already matched, so the cost
-    /// is proportional to candidate count, not document size. Builtins
-    /// only: a Rust function pointer can't be expressed in a TOML rules
-    /// file, so user-defined rules always get `None` here (see
-    /// `parse_rules` below).
+    /// Optional structural check beyond the pattern — a real checksum.
+    /// Builtins only: a function pointer cannot come from a TOML file.
     pub validator: Option<fn(&str) -> bool>,
     /// If set, only this capture group's span becomes the finding — not
     /// the whole match. Lets a rule require surrounding context for
@@ -166,20 +158,9 @@ pub fn builtin_rules() -> Vec<Rule> {
         // don't validate SSA area-number rules. False positives are
         // acceptable because a human reviews findings.
         Rule::new("ssn", "US Social Security Number", r"\b\d{3}-\d{2}-\d{4}\b"),
-        // US phone: parenthesized area code is an explicit alternative so
-        // the match anchors at '(' — \b cannot sit between space and paren.
-        //
-        // Separators are REQUIRED between groups, not optional. When they
-        // were optional this matched any bare run of ten digits, which in
-        // a log file means every millisecond timestamp and integer
-        // constant: 6,066 hits across loghub's 16 sample corpora, none of
-        // them phone numbers. Requiring formatting takes that to zero.
-        //
-        // The deliberate cost: an unformatted 5551234567 no longer
-        // matches. That is real recall given up, and it is the right
-        // trade — a bare ten-digit number is genuinely indistinguishable
-        // from a timestamp, a PID, or a lock id, so matching it produced
-        // far more noise than signal.
+        // Separators between groups are required, not optional — otherwise
+        // this matches any bare 10-digit run, i.e. every timestamp in a log.
+        // Cost: an unformatted 5551234567 no longer matches.
         Rule::new(
             "us_phone",
             "US Phone Number",
@@ -192,16 +173,8 @@ pub fn builtin_rules() -> Vec<Rule> {
             "AWS Access Key ID",
             r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
         ),
-        // Google Cloud API key: fixed "AIza" prefix + 35 alnum/-/_, 39
-        // chars total. Verified against current Google documentation.
-        // NOTE: Google is mid-transition (as of mid-2026) to a second,
-        // "AQ."-prefixed key format for keys issued via AI Studio: old
-        // AIza keys are being phased out through September 2026. That
-        // new format is not deliberately excluded — the length/charset
-        // wasn't confidently pinned down from public docs at the time
-        // this rule was written, and guessing wrong on a security-tool
-        // pattern seemed worse than a documented gap. Revisit once
-        // Google publishes the format.
+        // Does not cover Google's newer "AQ." format, whose length and
+        // charset were not documented when this was written.
         Rule::new("gcp_api_key", "GCP API Key", r"\bAIza[0-9A-Za-z\-_]{35}\b"),
         // Google OAuth 2.0 client ID: numeric project prefix + random
         // string + the long-standing, stable .apps.googleusercontent.com
@@ -220,15 +193,8 @@ pub fn builtin_rules() -> Vec<Rule> {
             "Oracle Cloud Identifier",
             r"\bocid1\.[a-z0-9]+\.[a-z0-9]+\.[a-z0-9-]*\.[a-z0-9]+\b",
         ),
-        // Azure Shared Access Signature token: requires BOTH a dated
-        // storage-service-version (sv=) parameter AND a signature
-        // (sig=) parameter co-occurring, non-greedily spanning whatever
-        // other query parameters sit between them. Rust's regex crate
-        // has no lookaround, so this leans on the sv=...sig= ordering
-        // being effectively universal in real SAS tokens (sig is
-        // computed from the other parameters, so it's conventionally
-        // emitted last) rather than asserting it independently of match
-        // position.
+        // Requires both sv= and sig=. Relies on their conventional ordering,
+        // since Rust's regex has no lookaround to assert co-occurrence.
         Rule::new(
             "azure_sas_token",
             "Azure SAS Token",
@@ -294,53 +260,10 @@ pub fn builtin_rules() -> Vec<Rule> {
             "HashiCorp Vault Token",
             r"\bhv[sbr]\.[A-Za-z0-9]{24,}\b",
         ),
-        // IPv6 address, full and compressed (::) forms. Three branches,
-        // each covering a structurally distinct, genuinely-valid shape:
-        //   1. full form — exactly 8 groups, no compression
-        //   2. compressed form — leading group(s), a literal "::", then
-        //      optional trailing group(s)
-        //   3. starts with a bare "::"
-        //
-        // This replaced an earlier, more liberal 2-branch version after
-        // testing turned up a real bug, not just a nuisance: a
-        // HH:MM:SS-shaped timestamp like "14:23:05" has 2 colons and
-        // all-digit (= valid hex) groups, so a pattern that just counted
-        // colons matched it as a plausible short IPv6 address. That
-        // shape was never actually valid IPv6 in the first place — an
-        // address without "::" compression must have exactly 8 groups,
-        // full stop, so a 2-3 group address with single colons and no
-        // "::" isn't a permissible shorter form, it's just invalid.
-        // Requiring EITHER the full 8-group form OR an actual literal
-        // "::" fixes this correctly rather than papering over it with a
-        // higher minimum-colon-count heuristic — a real timestamp can
-        // never contain a literal double colon, so this isn't a
-        // precision/recall trade-off, it's excluding a shape that was
-        // always wrong. Verified clean against HH:MM:SS timestamps,
-        // decimal ratios, and MAC addresses (6 colon-separated hex
-        // groups — structurally the closest look-alike).
-        //
-        // No \b boundaries: real addresses routinely start or end with a
-        // colon (::1, 2001:db8::), and \b cannot sit between two
-        // non-word characters — the same limitation already documented
-        // on the us_phone rule above.
-        //
-        // The "std::io" trade-off previously accepted here is now fixed.
-        // Corpus measurement showed it was not a rare edge case: `::0` and
-        // `::1` from C++/Rust scope resolution (onTouchEvent::0,
-        // ICSITransaction::Commit) made up most of this rule's 437 hits
-        // across loghub's sample corpora.
-        //
-        // The guard is the leading (?:^|[^0-9A-Za-z_:]): a scope-resolution
-        // `::` is always preceded by an identifier character, a real
-        // address never is. Rust's regex has no lookbehind, so that
-        // character is consumed and the address captured in group 1 —
-        // the same finding_group mechanism db_connection_string uses.
-        // A newline satisfies the guard, so an address at the start of a
-        // line still matches; ^ only covers the very first byte.
-        //
-        // The validator handles what the pattern cannot: a hardware
-        // address like FF:F2:9F:16:E2:23:00:0D is eight colon-separated
-        // hex groups, structurally identical to full-form IPv6.
+        // Two valid shapes: the full 8-group form, or one containing "::".
+        // The leading guard stands in for lookbehind (which Rust's regex
+        // lacks) so C++/Rust scope resolution stops matching; the validator
+        // rejects 8-group hardware addresses.
         Rule::with_group_and_validator(
             "ipv6",
             "IPv6 Address",
@@ -353,18 +276,9 @@ pub fn builtin_rules() -> Vec<Rule> {
             1,
             ipv6_is_not_hardware_address,
         ),
-        // OpenAI API key: sk- + a documented modern sub-prefix + random
-        // suffix. Deliberately requires one of the three current
-        // sub-prefixes rather than also accepting bare legacy "sk-" keys
-        // (no sub-prefix at all) — OpenAI is actively phasing those out,
-        // and a bare "sk-" branch would collide with Anthropic's
-        // "sk-ant-..." keys below (both start with "sk-", and without
-        // this restriction the two rules would both match the same
-        // Anthropic key, leaving detect()'s overlap resolution to decide
-        // the label somewhat arbitrarily). No fixed length: OpenAI's key
-        // length has changed at least once recently (one key reported
-        // going from 56 to ~165 total characters between generations),
-        // so a length floor is used instead of an exact count.
+        // Requires a documented sub-prefix rather than a bare "sk-", which
+        // would also match every Anthropic key below. No fixed length —
+        // OpenAI has changed it.
         Rule::new(
             "openai_api_key",
             "OpenAI API Key",
@@ -405,17 +319,8 @@ pub fn builtin_rules() -> Vec<Rule> {
             ),
             luhn_valid,
         ),
-        // JSON Web Token: header.payload.signature, each base64url (RFC
-        // 4648 §5, no padding). A bare shape match on "three dot-
-        // separated base64-ish segments" is far too liberal on its own —
-        // that shape shows up coincidentally in package names, version
-        // strings, and other unrelated contexts. The validator decodes
-        // the header segment and confirms it's actually valid JSON
-        // containing an "alg" key, which every real JWT header has per
-        // RFC 7519 — turning this from a shape-only rule (which we'd
-        // correctly rejected before) into one with real structural
-        // validation behind it, the same category of improvement Luhn
-        // gave the credit-card rule.
+        // Shape alone is far too liberal; the validator decodes the header
+        // and confirms it is JSON containing "alg".
         Rule::with_validator(
             "jwt",
             "JSON Web Token",
@@ -490,31 +395,9 @@ pub fn builtin_rules() -> Vec<Rule> {
             r"\b\d{9}\b",
             canadian_sin_is_valid,
         ),
-        // Database connection string: matches the full scheme://user:
-        // password@host shape for precision (a bare password alone has
-        // no distinguishing context at all), but finding_group narrows
-        // the actual finding to just the captured group — the first
-        // builtin to use that mechanism. Username is optional (`*`, not
-        // `+`) specifically for Redis's common `redis://:password@host`
-        // convention, which has no username at all — an earlier draft
-        // required at least one username character and silently missed
-        // every password-only Redis URL.
-        //
-        // The captured group includes the LEADING COLON (":password",
-        // not just "password") for a real reason, not style: the
-        // existing email rule also matches "password@host" whenever the
-        // host looks domain-shaped, which is most of the time. Both
-        // rules' findings would then start at the same position, and
-        // overlap resolution keeps the longer one — email's, since it
-        // includes the whole domain — meaning db_connection_string
-        // would be silently shadowed and never actually appear for a
-        // realistic connection string. Verified this happens with the
-        // colon excluded; including it shifts this rule's start one
-        // character earlier than email's independent match, which wins
-        // outright on "earliest start" rather than needing the tie-break
-        // at all. The redacted token absorbs the colon along with the
-        // password, which is a minor, acceptable cosmetic cost for a
-        // rule that would otherwise never fire in practice.
+        // Matches the whole connection string for precision but flags only
+        // the captured credential. Username is optional for Redis's
+        // redis://:password@host form.
         Rule::with_group(
             "db_connection_string",
             "Database Connection String Credential",
@@ -743,6 +626,18 @@ fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyErro
     }
 
     Ok(rules)
+}
+
+/// Throwaway rule for previewing a candidate pattern, under the same size
+/// cap as rules loaded from TOML.
+pub fn compile_preview_rule(pattern: &str) -> Result<Rule, RedactifyError> {
+    Ok(Rule {
+        id: "preview".to_string(),
+        name: "Preview".to_string(),
+        pattern: compile_user_pattern("preview", pattern, USER_PATTERN_SIZE_LIMIT)?,
+        validator: None,
+        finding_group: None,
+    })
 }
 
 /// Load user-defined rules from a TOML file.

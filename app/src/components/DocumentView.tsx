@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { TEXT_SIZE_METRICS, type TextSize } from "../textSize";
-import type { ScanOutcome } from "../App";
+import type { PatternPreview, ScanOutcome } from "../App";
 import { tally, type Review } from "../review";
 
 export type ViewMode = "before" | "after";
@@ -22,6 +22,7 @@ interface Props {
   /** Line index of the current search match, for the row tint. */
   currentSearchLine: number | null;
   textSize: TextSize;
+  preview: PatternPreview | null;
   onBrowse: () => void;
 }
 
@@ -75,13 +76,8 @@ function highlightQuery(text: string, query: string, keyBase: string) {
   return nodes;
 }
 
-// memo + forwardRef: App re-renders on every keystroke and every match
-// step. Before virtualization this required imperatively mutating the DOM
-// (classList/scrollIntoView) to avoid redrawing 30k rows on every such
-// render. Now that only the visible rows are ever mounted, re-rendering on
-// prop changes (e.g. currentSearchLine) is cheap — so this version renders
-// declaratively from props instead, and just exposes scrollToLine for the
-// one thing App still needs to trigger imperatively (a scroll jump).
+// memo + forwardRef: App re-renders on every keystroke, and scrollToLine is
+// the one thing that still has to be imperative.
 export const DocumentView = memo(
   forwardRef<DocumentViewHandle, Props>(function DocumentView(
     {
@@ -92,6 +88,7 @@ export const DocumentView = memo(
       searchQuery,
       currentSearchLine,
       textSize,
+      preview,
       onBrowse,
     },
     ref,
@@ -113,6 +110,12 @@ export const DocumentView = memo(
     useEffect(() => {
       rowVirtualizer.measure();
     }, [rowPx, rowVirtualizer]);
+
+    const previewLines = useMemo(() => {
+      const map = new Map<number, ScanOutcome["lines"][number]>();
+      for (const line of preview?.lines ?? []) map.set(line.index, line.segments);
+      return map;
+    }, [preview]);
 
     const ruleIds = useMemo(
       () =>
@@ -136,13 +139,8 @@ export const DocumentView = memo(
       return map;
     }, [outcome]);
 
-    // Widest line in the document, in characters. Monospace + CSS `ch`
-    // units give the exact pixel width without measuring anything in the
-    // DOM — and, importantly, give the row wrapper an explicit width.
-    // Absolutely-positioned virtual rows don't otherwise contribute to
-    // their parent's intrinsic width the way normal-flow content does, so
-    // without this the outer pane's horizontal scrollbar would stop
-    // reflecting the true width of long lines.
+    // Absolutely-positioned rows do not give the parent an intrinsic width,
+    // so the horizontal scrollbar needs one. Monospace makes `ch` exact.
     const maxLineChars = useMemo(() => {
       if (!outcome) return 0;
       let max = 0;
@@ -208,6 +206,24 @@ export const DocumentView = memo(
 
     /** Render one line's content for the current view mode. */
     function renderLine(i: number) {
+      // Preview overrides the scan output for that line.
+      const previewSegments = previewLines.get(i);
+      if (previewSegments) {
+        return previewSegments.map((seg, j) =>
+          seg.finding === null ? (
+            <span key={j}>{seg.text}</span>
+          ) : (
+            <mark
+              key={j}
+              className="rounded-sm bg-accent-soft px-0.5 text-accent [text-decoration:underline_dashed] decoration-accent"
+              title="candidate pattern match — not yet a rule"
+            >
+              {seg.text}
+            </mark>
+          ),
+        );
+      }
+
       const segments = oc.lines[i];
 
       if (mode === "after") {
@@ -231,13 +247,7 @@ export const DocumentView = memo(
           }
 
           if (state === "pending") {
-            // Deliberately distinct from rejected — a rejected finding is
-            // a reviewer's final decision to leave it visible; a pending
-            // one is visible only because it hasn't been decided yet, and
-            // that's a meaningfully different thing to see in an output
-            // preview. Same underline-by-rule language as before mode's
-            // pending marks, so the two views share one visual vocabulary
-            // instead of each inventing its own.
+            // Distinct from rejected: pending is undecided, not a decision.
             const hue = ruleHue(oc.findings[idx].rule_id, ruleIds);
             return (
               <mark

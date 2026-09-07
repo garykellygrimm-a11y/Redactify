@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RuleView, ScanOutcome } from "../App";
+import type { PatternPreview, RuleView, ScanOutcome } from "../App";
 import type { Review, Verdict } from "../review";
 import { FindingsPanel } from "./FindingsPanel";
 import { RulesPanel } from "./RulesPanel";
@@ -9,6 +9,10 @@ interface Props {
   review: Review;
   rules: RuleView[];
   rulesPath: string | null;
+  previewPattern: string;
+  preview: PatternPreview | null;
+  previewError: string | null;
+  onPreviewPatternChange: (pattern: string) => void;
   onFocus: (index: number) => void;
   onDecide: (index: number, verdict: Verdict) => void;
   onDecideGroup: (indices: number[], verdict: Verdict) => void;
@@ -32,6 +36,10 @@ export function Sidebar({
   review,
   rules,
   rulesPath,
+  previewPattern,
+  preview,
+  previewError,
+  onPreviewPatternChange,
   onFocus,
   onDecide,
   onDecideGroup,
@@ -69,7 +77,15 @@ export function Sidebar({
             onDecideGroup={onDecideGroup}
           />
         ) : (
-          <RulesPanel rules={rules} rulesPath={rulesPath} />
+          <RulesPanel
+            rules={rules}
+            rulesPath={rulesPath}
+            previewPattern={previewPattern}
+            preview={preview}
+            previewError={previewError}
+            onPreviewPatternChange={onPreviewPatternChange}
+            hasDocument={outcome !== null}
+          />
         )}
       </div>
     </aside>

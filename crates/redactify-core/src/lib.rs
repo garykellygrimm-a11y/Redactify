@@ -6,7 +6,9 @@ mod rules;
 pub use error::RedactifyError;
 pub use finding::Finding;
 pub use manifest::{Disposition, Manifest, ManifestFinding, sha256_hex};
-pub use rules::{Rule, RuleInfo, builtin_rules, load_rules_file, merge_rules};
+pub use rules::{
+    Rule, RuleInfo, builtin_rules, compile_preview_rule, load_rules_file, merge_rules,
+};
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,
 /// with overlaps resolved (earliest start wins; on a tie, longest match wins).
@@ -14,20 +16,11 @@ pub fn detect(text: &str, rules: &[Rule]) -> Vec<Finding> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for rule in rules {
-        // captures_iter (not find_iter) throughout, even for the vast
-        // majority of rules that don't use finding_group: group 0 is
-        // always the whole match, so this is exactly find_iter's
-        // behavior for them. One code path rather than branching on
-        // whether finding_group is set is simpler to get right, and the
-        // extra capture bookkeeping is immaterial at this scale (a
-        // detection pass over a document, not a hot loop).
+        // captures_iter, not find_iter: group 0 is the whole match, so this
+        // is identical for rules without a finding_group.
         let group_idx = rule.finding_group.unwrap_or(0);
         for caps in rule.pattern.captures_iter(text) {
-            // Only None if `group_idx` refers to a group that didn't
-            // participate in this particular match (e.g. one side of an
-            // alternation) — every builtin using finding_group so far
-            // has that group in a mandatory, non-optional position, so
-            // this is a defensive skip, not an expected path.
+            // None only if the group did not participate in this match.
             let Some(m) = caps.get(group_idx) else {
                 continue;
             };

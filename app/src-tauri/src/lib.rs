@@ -4,10 +4,10 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
-    builtin_rules, compile_preview_rule, detect, load_rules_file, merge_rules, redact, sha256_hex,
-    Disposition, Finding, Manifest, Rule, RuleInfo,
+    builtin_rules, compile_preview_rule, detect, glob_to_regex, load_rules_file, merge_rules,
+    redact, sha256_hex, Disposition, Finding, Manifest, Rule, RuleInfo,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager, State};
 
@@ -91,8 +91,18 @@ struct PreviewLine {
     segments: Vec<Segment>,
 }
 
+/// How to read the text the user typed.
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum PatternSyntax {
+    Regex,
+    Glob,
+}
+
 #[derive(Serialize)]
 struct PatternPreview {
+    /// The regex actually run — differs from the input in glob mode.
+    regex: String,
     match_count: usize,
     lines: Vec<PreviewLine>,
     /// `match_count` stays exact when this is true.
@@ -393,22 +403,32 @@ const PREVIEW_LINE_CAP: usize = 200;
 /// Runs a candidate pattern against the open document without touching the
 /// session rule set. Size-capped, since it compiles whatever is typed.
 #[tauri::command]
-fn preview_pattern(pattern: String, state: State<AppState>) -> Result<PatternPreview, String> {
-    let empty = || PatternPreview {
+fn preview_pattern(
+    pattern: String,
+    syntax: PatternSyntax,
+    state: State<AppState>,
+) -> Result<PatternPreview, String> {
+    let regex = match syntax {
+        PatternSyntax::Glob => glob_to_regex(&pattern),
+        PatternSyntax::Regex => pattern,
+    };
+
+    let empty = |regex: String| PatternPreview {
+        regex,
         match_count: 0,
         lines: Vec::new(),
         truncated: false,
     };
 
-    if pattern.is_empty() {
-        return Ok(empty());
+    if regex.is_empty() {
+        return Ok(empty(regex));
     }
 
-    let rule = compile_preview_rule(&pattern).map_err(|e| e.to_string())?;
+    let rule = compile_preview_rule(&regex).map_err(|e| e.to_string())?;
 
     let guard = state.document.lock().unwrap();
     let Some(doc) = guard.as_ref() else {
-        return Ok(empty());
+        return Ok(empty(regex));
     };
 
     let findings = detect(&doc.text, std::slice::from_ref(&rule));
@@ -428,6 +448,7 @@ fn preview_pattern(pattern: String, state: State<AppState>) -> Result<PatternPre
     }
 
     Ok(PatternPreview {
+        regex,
         match_count,
         lines,
         truncated,

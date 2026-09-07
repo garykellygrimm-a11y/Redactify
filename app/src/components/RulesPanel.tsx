@@ -1,10 +1,12 @@
 import { memo } from "react";
-import type { PatternPreview, RuleView } from "../App";
+import type { PatternPreview, PatternSyntax, RuleView } from "../App";
 
 interface Props {
   rules: RuleView[];
   rulesPath: string | null;
   previewPattern: string;
+  previewSyntax: PatternSyntax;
+  onPreviewSyntaxChange: (syntax: PatternSyntax) => void;
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
@@ -25,6 +27,8 @@ export const RulesPanel = memo(function RulesPanel({
   rules,
   rulesPath,
   previewPattern,
+  previewSyntax,
+  onPreviewSyntaxChange,
   preview,
   previewError,
   onPreviewPatternChange,
@@ -47,22 +51,52 @@ export const RulesPanel = memo(function RulesPanel({
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="border-b border-border p-3">
-        <label className="mb-1 block text-xs font-medium text-muted">
-          Test a pattern
-        </label>
+        <div className="mb-1 flex items-center justify-between">
+          <label className="text-xs font-medium text-muted">Test a pattern</label>
+          <div className="flex overflow-hidden rounded border border-border text-[10px]">
+            {(["glob", "regex"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => onPreviewSyntaxChange(mode)}
+                className={`px-1.5 py-0.5 ${
+                  previewSyntax === mode
+                    ? "bg-accent-soft text-accent"
+                    : "text-muted hover:bg-surface-sunken"
+                }`}
+              >
+                {mode === "glob" ? "Simple" : "Regex"}
+              </button>
+            ))}
+          </div>
+        </div>
         <input
           value={previewPattern}
           onChange={(e) => onPreviewPatternChange(e.target.value)}
-          placeholder={String.raw`\b\d{3}-\d{2}-\d{4}\b`}
+          placeholder={
+            previewSyntax === "glob"
+              ? "*@navy.mil"
+              : String.raw`\b\d{3}-\d{2}-\d{4}\b`
+          }
           spellCheck={false}
           className="w-full rounded-md border border-border bg-surface-sunken px-2 py-1 font-mono text-xs outline-none focus:border-accent focus:ring-2 focus:ring-accent"
         />
+        {previewSyntax === "glob" && preview && previewPattern && !previewError && (
+          <div
+            className="mt-1 truncate font-mono text-[11px] text-muted"
+            title={preview.regex}
+          >
+            → {preview.regex}
+          </div>
+        )}
+
         <div className="mt-1.5 min-h-4 text-xs">
           {previewError ? (
             <span className="text-pending">{previewError}</span>
           ) : !previewPattern ? (
             <span className="text-muted">
-              Matches highlight in the document as you type.
+              {previewSyntax === "glob"
+                ? "Use * for any run of characters, ? for one."
+                : "Matches highlight in the document as you type."}
             </span>
           ) : !hasDocument ? (
             <span className="text-muted">Open a document to see matches.</span>

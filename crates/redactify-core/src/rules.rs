@@ -628,6 +628,33 @@ fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyErro
     Ok(rules)
 }
 
+/// Translate a shell-style glob into a regex.
+///
+/// `*` becomes `\S*` rather than `.*` deliberately: `.*` is greedy and
+/// crosses whitespace, so `*@navy.mil` would match an entire line up to the
+/// address instead of just the address.
+pub fn glob_to_regex(glob: &str) -> String {
+    let mut out = String::with_capacity(glob.len() * 2);
+    let mut literal = String::new();
+
+    for ch in glob.chars() {
+        match ch {
+            '*' | '?' => {
+                if !literal.is_empty() {
+                    out.push_str(&regex::escape(&literal));
+                    literal.clear();
+                }
+                out.push_str(if ch == '*' { r"\S*" } else { r"\S" });
+            }
+            _ => literal.push(ch),
+        }
+    }
+    if !literal.is_empty() {
+        out.push_str(&regex::escape(&literal));
+    }
+    out
+}
+
 /// Throwaway rule for previewing a candidate pattern, under the same size
 /// cap as rules loaded from TOML.
 pub fn compile_preview_rule(pattern: &str) -> Result<Rule, RedactifyError> {
@@ -715,6 +742,42 @@ pattern = 'b+'
             Err(RedactifyError::DuplicateRuleId { id }) => assert_eq!(id, "twin"),
             other => panic!("expected DuplicateRuleId, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn glob_star_does_not_cross_whitespace() {
+        // The whole point of \S* over .*: a greedy .* would take the entire
+        // line up to the address.
+        let re = Regex::new(&glob_to_regex("*@navy.mil")).expect("compiles");
+        let m = re
+            .find("Sent from john.doe@navy.mil at 0900")
+            .expect("matches");
+        assert_eq!(m.as_str(), "john.doe@navy.mil");
+    }
+
+    #[test]
+    fn glob_escapes_literals() {
+        assert_eq!(glob_to_regex("*@navy.mil"), r"\S*@navy\.mil");
+        // A dot in the glob is a literal dot, not "any character".
+        let re = Regex::new(&glob_to_regex("a.b")).expect("compiles");
+        assert!(re.is_match("a.b"));
+        assert!(!re.is_match("axb"));
+    }
+
+    #[test]
+    fn glob_question_mark_is_one_character() {
+        let re = Regex::new(&glob_to_regex("SSN-???")).expect("compiles");
+        assert!(re.is_match("SSN-123"));
+        assert!(!re.is_match("SSN-12"));
+    }
+
+    #[test]
+    fn glob_handles_edges() {
+        assert_eq!(glob_to_regex(""), "");
+        assert_eq!(glob_to_regex("*"), r"\S*");
+        // Regex metacharacters typed literally must not become syntax.
+        let re = Regex::new(&glob_to_regex("(cost)+")).expect("compiles");
+        assert!(re.is_match("(cost)+"));
     }
 
     #[test]

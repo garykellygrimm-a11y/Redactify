@@ -1,5 +1,10 @@
 import { useState } from "react";
-import type { PatternPreview, RuleView, ScanOutcome } from "../App";
+import type {
+  PatternPreview,
+  PatternSyntax,
+  RuleView,
+  ScanOutcome,
+} from "../App";
 import type { Review, Verdict } from "../review";
 import { FindingsPanel } from "./FindingsPanel";
 import { RulesPanel } from "./RulesPanel";
@@ -10,6 +15,8 @@ interface Props {
   rules: RuleView[];
   rulesPath: string | null;
   previewPattern: string;
+  previewSyntax: PatternSyntax;
+  onPreviewSyntaxChange: (syntax: PatternSyntax) => void;
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
@@ -37,6 +44,8 @@ export function Sidebar({
   rules,
   rulesPath,
   previewPattern,
+  previewSyntax,
+  onPreviewSyntaxChange,
   preview,
   previewError,
   onPreviewPatternChange,
@@ -81,6 +90,8 @@ export function Sidebar({
             rules={rules}
             rulesPath={rulesPath}
             previewPattern={previewPattern}
+            previewSyntax={previewSyntax}
+            onPreviewSyntaxChange={onPreviewSyntaxChange}
             preview={preview}
             previewError={previewError}
             onPreviewPatternChange={onPreviewPatternChange}

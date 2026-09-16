@@ -1,6 +1,6 @@
 [package]
 name = "redactify-app"
-version = "0.6.2"
+version = "0.6.3"
 description = "Redactify desktop app"
 authors = ["Gary Kelly-Grimm"]
 edition = "2021"

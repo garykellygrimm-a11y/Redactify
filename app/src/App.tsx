@@ -91,7 +91,10 @@ export interface PreviewLine {
   segments: Segment[];
 }
 
+export type PatternSyntax = "regex" | "glob";
+
 export interface PatternPreview {
+  regex: string;
   match_count: number;
   lines: PreviewLine[];
   truncated: boolean;
@@ -121,6 +124,7 @@ function App() {
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
   const [rules, setRules] = useState<RuleView[]>([]);
   const [previewPattern, setPreviewPattern] = useState("");
+  const [previewSyntax, setPreviewSyntax] = useState<PatternSyntax>("glob");
   const [preview, setPreview] = useState<PatternPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportOutcome | null>(null);
@@ -268,7 +272,10 @@ function App() {
       return;
     }
     const timer = setTimeout(() => {
-      invoke<PatternPreview>("preview_pattern", { pattern: previewPattern })
+      invoke<PatternPreview>("preview_pattern", {
+        pattern: previewPattern,
+        syntax: previewSyntax,
+      })
         .then((result) => {
           setPreview(result);
           setPreviewError(null);
@@ -279,7 +286,7 @@ function App() {
         });
     }, 250);
     return () => clearTimeout(timer);
-  }, [previewPattern, outcome]);
+  }, [previewPattern, previewSyntax, outcome]);
 
   const browse = useCallback(async () => {
     const picked = await openDialog({ multiple: false, directory: false });
@@ -630,6 +637,8 @@ function App() {
             rules={rules}
             rulesPath={rulesInfo?.path ?? null}
             previewPattern={previewPattern}
+            previewSyntax={previewSyntax}
+            onPreviewSyntaxChange={setPreviewSyntax}
             preview={preview}
             previewError={previewError}
             onPreviewPatternChange={setPreviewPattern}

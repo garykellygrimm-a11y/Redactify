@@ -23,9 +23,9 @@ jobs:
         id: check
         run: |
           set -euo pipefail
-          VERSION="$(grep -m1 '^version' app/src-tauri/Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
+          VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/version = "(.*)"/\1/')"
           if [ -z "$VERSION" ]; then
-            echo "could not read a version from app/src-tauri/Cargo.toml" >&2
+            echo "could not read a version from Cargo.toml" >&2
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

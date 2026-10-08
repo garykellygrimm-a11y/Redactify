@@ -1,43 +1,19 @@
-# One package. The desktop app and the CLI ship together on a single
-# version number.
-
 [package]
 versioned_files = [
-  "app/src-tauri/Cargo.toml",
+  "Cargo.toml",
   "app/package.json",
-  "crates/redactify-cli/Cargo.toml",
-  "crates/redactify-core/Cargo.toml",
-  # Cargo.lock needs one entry per workspace crate; Knope applies all three
-  # to the same file.
   { path = "Cargo.lock", dependency = "redactify-app" },
   { path = "Cargo.lock", dependency = "redactify-cli" },
   { path = "Cargo.lock", dependency = "redactify-core" },
   "app/package-lock.json",
 ]
 changelog = "CHANGELOG.md"
-
-# Scopes still filter which commits count, even with one package. Keeping
-# app/cli/core preserves the existing behavior of ignoring `fix(ci):` and
-# similar — CI plumbing changes shouldn't cut a release.
-#
-# The trade-off to know about: an UNSCOPED `feat:` or `fix:` is ignored
-# too. Every feat/fix commit in this repo's history is scoped, so nothing
-# is currently missed, but a future unscoped one would silently not count.
 scopes = ["app", "cli", "core"]
-
-# A glob, not a file list. Tauri emits version-stamped filenames
-# (Redactify_0.6.1_x64-setup.exe); a glob takes them as-is, so nothing
-# needs renaming and the version stays visible in the download name.
-# One directory now, since app installers and CLI archives go to the same
-# release.
 assets = "artifacts/*"
 
 # ---------------------------------------------------------------------------
 # prepare-release: run on every push to main, keeps one open release PR
 # ---------------------------------------------------------------------------
-# Branch is `chore/release`, NOT the recipe's bare `release` — the repo's
-# branch-name-check workflow requires `type/slug` and would reject a
-# slashless branch name outright.
 
 [[workflows]]
 name = "prepare-release"
@@ -61,7 +37,6 @@ command = "git push --force --set-upstream origin chore/release"
 type = "CreatePullRequest"
 base = "main"
 
-# $version and $changelog work again now that there's a single package.
 [workflows.steps.title]
 template = "chore: release $version"
 
@@ -71,13 +46,6 @@ template = "Opened automatically by Knope. Merging this releases $version.\n\n$c
 # ---------------------------------------------------------------------------
 # document-change: create a changeset by hand
 # ---------------------------------------------------------------------------
-# Defining any workflows in knope.toml REPLACES Knope's built-in commands,
-# so `document-change` has to be declared explicitly to exist at all.
-#
-# This is the lever for forcing a bump Knope wouldn't infer. Note the
-# pre-1.0 shift: Knope moves every level down one below 1.0, so a
-# changeset saying `major` produces a MINOR bump and `minor` produces a
-# patch. Forcing 0.7.0 for a milestone therefore needs `major`.
 
 [[workflows]]
 name = "document-change"
@@ -98,3 +66,5 @@ type = "Release"
 [github]
 owner = "garykellygrimm-a11y"
 repo = "Redactify"
+
+

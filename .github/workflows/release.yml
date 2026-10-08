@@ -32,8 +32,11 @@ jobs:
           if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
             echo "v${VERSION} is already tagged — nothing to release."
             echo "needed=false" >> "$GITHUB_OUTPUT"
+          elif ! grep -q "^## ${VERSION} " CHANGELOG.md; then
+            echo "CHANGELOG.md has no section for ${VERSION} — waiting for a release PR."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
           else
-            echo "v${VERSION} has no tag — releasing."
+            echo "v${VERSION} has no tag and a changelog section — releasing."
             echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 

@@ -48,11 +48,11 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: ""
+            args: "-- --locked"
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
+            args: "--target universal-apple-darwin -- --locked"
           - platform: ubuntu-22.04
-            args: ""
+            args: "-- --locked"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
@@ -73,10 +73,10 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: lts/*
+          node-version: 24
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
         working-directory: app
 
       - name: Build the desktop app
@@ -139,7 +139,7 @@ jobs:
       - name: Build CLI
         env:
           RUSTFLAGS: ${{ matrix.rustflags }}
-        run: cargo build --release -p redactify-cli --target ${{ matrix.target }}
+        run: cargo build --release --locked -p redactify-cli --target ${{ matrix.target }}
 
       - name: Package (Windows)
         if: runner.os == 'Windows'

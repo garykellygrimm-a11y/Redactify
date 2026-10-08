@@ -1,0 +1,34 @@
+name: docs-check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-updated:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-docs-needed') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require docs changes when code changes
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          echo "Changed files:"
+          echo "$changed"
+          code=$(echo "$changed" \
+            | grep -E '^(crates/|app/src/|app/src-tauri/)' \
+            | grep -v -E '(^|/)(Cargo\.toml|Cargo\.lock|package(-lock)?\.json)$' || true)
+          docs=$(echo "$changed" | grep -E '^((README|CONTRIBUTING|SECURITY)\.md$|docs/)' || true)
+          if [ -n "$code" ] && [ -z "$docs" ]; then
+            echo "::error::Code changed but README.md, CONTRIBUTING.md, SECURITY.md, and docs/ did not. Update the docs, or add the 'no-docs-needed' label if this change has no user-facing effect."
+            exit 1
+          fi

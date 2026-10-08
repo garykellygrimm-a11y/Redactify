@@ -32,3 +32,6 @@ Desktop.ini
 clean.log
 audit.json
 *.redacted
+
+# --- Claude Artifacts ---
+.claude/

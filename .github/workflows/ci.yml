@@ -26,9 +26,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Lint
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Test
-        run: cargo test --all
+        run: cargo test --all --locked
 
   tauri-versions:
     name: Tauri crate/npm versions

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       override_version:
-        description: "Optional: force versions, e.g. redactify-app=0.6.0 (see knope prepare-release --help)"
+        description: "Optional: force the next version, e.g. 0.7.0"
         required: false
         type: string
 
@@ -62,8 +62,8 @@ jobs:
           # PrepareRelease errors, so the commit/push/PR steps never run —
           # nothing partial is left behind.
           set +e
-          if [ -n "${{ inputs.override_version }}" ]; then
-            output=$(knope prepare-release --verbose --override-version "${{ inputs.override_version }}" 2>&1)
+          if [ -n "$OVERRIDE_VERSION" ]; then
+            output=$(knope prepare-release --verbose --override-version "$OVERRIDE_VERSION" 2>&1)
           else
             output=$(knope prepare-release --verbose 2>&1)
           fi
@@ -78,3 +78,4 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          OVERRIDE_VERSION: ${{ inputs.override_version }}

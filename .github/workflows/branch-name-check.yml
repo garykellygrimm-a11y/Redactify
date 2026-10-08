@@ -6,16 +6,22 @@ on:
     branches-ignore:
       - main
 
+permissions:
+  contents: read
+
 jobs:
   check-branch-name:
     name: Enforce Naming Policy
     runs-on: ubuntu-latest
+    if: ${{ !startsWith(github.ref_name, 'dependabot/') }}
     steps:
       - name: Verify Regex Match
-        if: |
-          !startsWith(github.ref_name, 'release-please--') &&
-          !startsWith(github.ref_name, 'dependabot/')
-        uses: deepakputhraya/action-branch-name@master
-        with:
-          regex: '^(feature|feat|bugfix|bug|hotfix|fix|refactor|chore|docs|ci)\/[a-z0-9-]+$'
-          ignore: main
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if [[ "$BRANCH" =~ ^(feature|feat|bugfix|bug|hotfix|fix|refactor|chore|docs|ci)/[a-z0-9-]+$ ]]; then
+            echo "ok: $BRANCH"
+          else
+            echo "::error::Branch '$BRANCH' does not match type/slug, e.g. feat/rule-editor. Types: feature, feat, bugfix, bug, hotfix, fix, refactor, chore, docs, ci."
+            exit 1
+          fi

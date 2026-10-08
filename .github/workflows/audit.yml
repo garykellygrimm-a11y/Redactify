@@ -4,11 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
-  # Advisories are published against code that has not changed, so the
-  # scheduled run matters as much as the per-change one.
   schedule:
     - cron: "0 13 * * 1"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   audit:
@@ -20,9 +21,5 @@ jobs:
       - uses: taiki-e/install-action@v2.87.22
         with:
           tool: cargo-audit
-      # --deny warnings promotes informational advisories (unmaintained,
-      # unsound, yanked) to build failures. Known findings are allowlisted
-      # with justifications in .cargo/audit.toml; anything new stops the
-      # build and forces a documented decision.
       - name: Scan dependencies against the RustSec advisory database
         run: cargo audit --deny warnings

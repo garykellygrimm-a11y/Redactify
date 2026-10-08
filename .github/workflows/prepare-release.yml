@@ -1,18 +1,17 @@
 name: Prepare Release
 
-# Keeps a single open `chore/release` PR current with the next version
-# and changelog. Merging it is what releases.
-
 on:
   push:
     branches: [main]
-  # Manual trigger with an explicit override, for redoing a bad run.
   workflow_dispatch:
     inputs:
       override_version:
         description: "Optional: force the next version, e.g. 0.7.0"
         required: false
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   prepare-release:
@@ -21,19 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Knope reads the last version tag to decide where to start.
           fetch-depth: 0
-          # PAT, not GITHUB_TOKEN — pushes with the latter don't trigger the
-          # PR's required checks. Needs Contents, Pull requests, Workflows.
           token: ${{ secrets.RELEASE_PLZ_TOKEN }}
 
       - uses: actions/setup-node@v7
         with:
           node-version: lts/*
 
-      # Direct download, not knope-dev/action — its asset glob matches both
-      # the aarch64 and x86_64 tarballs and feeds both to tar. Note the
-      # "knope/" path segment: their repo tags releases knope/vX.Y.Z.
       - name: Install Knope
         env:
           KNOPE_VERSION: "0.22.4"

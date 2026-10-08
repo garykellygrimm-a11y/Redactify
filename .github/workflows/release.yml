@@ -1,12 +1,12 @@
 name: Release
 
-# Releases when main carries a version that has no tag yet. Keyed to that
-# rather than to the release PR closing, which never reliably fired.
-# One release per version, carrying both installers and CLI archives.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -76,16 +76,12 @@ jobs:
         run: npm install
         working-directory: app
 
-      # No tagName: build only. Knope creates the release.
       - name: Build the desktop app
         uses: tauri-apps/tauri-action@v1
         with:
           projectPath: app
           args: ${{ matrix.args }}
 
-      # Flattened so knope.toml's `artifacts/*` glob matches — upload-artifact
-      # otherwise preserves the nsis/ dmg/ deb/ nesting, which `*` won't cross.
-      # Searches the workspace root target dir, not app/src-tauri/target.
       - name: Stage installers
         shell: bash
         run: |
@@ -116,7 +112,6 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact: redactify-cli.exe
             archive: redactify-cli-windows-x64.zip
-            # Static CRT: runs on a bare Windows box with no dependencies.
             rustflags: "-C target-feature=+crt-static"
           - platform: macos-latest
             target: aarch64-apple-darwin
@@ -183,9 +178,6 @@ jobs:
       - name: Show what will be uploaded
         run: ls -la artifacts
 
-      # Direct download, not knope-dev/action — its asset glob matches both
-      # the aarch64 and x86_64 tarballs and feeds both to tar. Note the
-      # "knope/" path segment: their repo tags releases knope/vX.Y.Z.
       - name: Install Knope
         env:
           KNOPE_VERSION: "0.22.4"

@@ -26,3 +26,11 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test --all
+
+  tauri-versions:
+    name: Tauri crate/npm versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check Tauri crates and npm packages share major.minor
+        run: python3 scripts/check-tauri-versions.py

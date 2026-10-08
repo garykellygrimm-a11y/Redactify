@@ -7,6 +7,12 @@ versioned_files = [
   "app/package.json",
   "crates/redactify-cli/Cargo.toml",
   "crates/redactify-core/Cargo.toml",
+  # Cargo.lock needs one entry per workspace crate; Knope applies all three
+  # to the same file.
+  { path = "Cargo.lock", dependency = "redactify-app" },
+  { path = "Cargo.lock", dependency = "redactify-cli" },
+  { path = "Cargo.lock", dependency = "redactify-core" },
+  "app/package-lock.json",
 ]
 changelog = "CHANGELOG.md"
 

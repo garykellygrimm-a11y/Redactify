@@ -8,6 +8,15 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      cargo-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    cooldown:
+      default-days: 7
 
   # Frontend dependencies (React, Vite, Tauri JS API)
   - package-ecosystem: "npm"
@@ -17,6 +26,15 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    cooldown:
+      default-days: 7
 
   # The actions used in CI workflows themselves
   - package-ecosystem: "github-actions"
@@ -26,3 +44,9 @@ updates:
     open-pull-requests-limit: 3
     commit-message:
       prefix: "ci(deps)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7

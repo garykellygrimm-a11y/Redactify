@@ -28,7 +28,8 @@ Every rule needs all three fields:
 | `name` | Human-readable name shown in the app. |
 | `pattern` | The regular expression to match. |
 
-Other keys are ignored.
+Any other key is an error, so a misspelled key such as `[[rule]]` is reported
+instead of silently ignored.
 
 Write patterns in single quotes (`'...'`), as above. TOML treats single-quoted
 strings literally, so a backslash stays a backslash. In double quotes, every
@@ -91,16 +92,20 @@ Useful pieces:
 ## Errors
 
 A rules file is all or nothing. If any rule is invalid, the whole file is
-rejected, nothing is scanned, and the error names the rule. A partly loaded
-rule set would produce output you might wrongly believe was fully redacted.
-See [ADR 002](../adr/002-user-rules.md) for the reasoning.
+rejected, nothing is scanned, and the error names the file and the problem. A
+partly loaded rule set would produce output you might wrongly believe was fully
+redacted. See [ADR 002](../adr/002-user-rules.md) for the reasoning.
+
+Every error starts with the path of the rules file, such as
+`rules file 'my-rules.toml': `, followed by:
 
 | Problem | Error |
 | --- | --- |
 | Invalid pattern | `invalid pattern in rule 'bad': regex parse error: ...` |
 | Look-around in a pattern | `... look-around, including look-ahead and look-behind, is not supported` |
 | Two rules with the same `id` | `duplicate rule id 'a' in rules file` |
-| A missing field | ``invalid rules file: TOML parse error ... missing field `name` `` |
+| A missing field | ``TOML parse error ... missing field `name` `` |
+| An unknown key | ``TOML parse error ... unknown field `rule`, expected `rules` `` |
 
 ## Testing a pattern in the app
 

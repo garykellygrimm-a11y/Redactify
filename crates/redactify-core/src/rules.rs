@@ -569,12 +569,14 @@ fn us_routing_number_is_valid(matched: &str) -> bool {
 /// can't be deserialized directly — patterns arrive as strings and must
 /// survive validation before becoming a `Rule`.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RuleFile {
     #[serde(default)]
     rules: Vec<RuleSpec>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RuleSpec {
     id: String,
     name: String,
@@ -673,7 +675,10 @@ pub fn load_rules_file(path: &Path) -> Result<Vec<Rule>, RedactifyError> {
         path: path.display().to_string(),
         source,
     })?;
-    parse_rules(&text, USER_PATTERN_SIZE_LIMIT)
+    parse_rules(&text, USER_PATTERN_SIZE_LIMIT).map_err(|cause| RedactifyError::RulesFile {
+        path: path.display().to_string(),
+        cause: Box::new(cause),
+    })
 }
 
 /// Merge user rules over builtins. A user rule whose id matches a builtin
@@ -742,6 +747,58 @@ pattern = 'b+'
             Err(RedactifyError::DuplicateRuleId { id }) => assert_eq!(id, "twin"),
             other => panic!("expected DuplicateRuleId, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn misspelled_table_name_fails() {
+        // Without deny_unknown_fields, `[[rule]]` parsed as a file with zero
+        // rules and the scan ran without them.
+        let text = r#"
+[[rule]]
+id = "badge"
+name = "Badge Number"
+pattern = '\bBDG-\d{6}\b'
+"#;
+        match parse_rules(text, USER_PATTERN_SIZE_LIMIT) {
+            Err(RedactifyError::RulesParse(e)) => {
+                assert!(e.to_string().contains("unknown field `rule`"), "{e}")
+            }
+            other => panic!("expected RulesParse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_rule_field_fails() {
+        let text = r#"
+[[rules]]
+id = "badge"
+name = "Badge Number"
+pattern = '\bBDG-\d{6}\b'
+enabled = false
+"#;
+        match parse_rules(text, USER_PATTERN_SIZE_LIMIT) {
+            Err(RedactifyError::RulesParse(e)) => {
+                assert!(e.to_string().contains("unknown field `enabled`"), "{e}")
+            }
+            other => panic!("expected RulesParse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn load_error_names_the_file() {
+        let path =
+            std::env::temp_dir().join(format!("redactify-load-error-{}.toml", std::process::id()));
+        std::fs::write(&path, "[[rule]]\nid = \"x\"\nname = \"X\"\npattern = 'a'\n")
+            .expect("write temp rules file");
+        let result = load_rules_file(&path);
+        let _ = std::fs::remove_file(&path);
+
+        let message = result.expect_err("should fail").to_string();
+        assert!(
+            message.starts_with(&format!("rules file '{}': ", path.display())),
+            "{message}"
+        );
+        assert!(message.contains("unknown field `rule`"), "{message}");
     }
 
     #[test]

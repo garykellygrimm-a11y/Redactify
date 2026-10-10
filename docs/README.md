@@ -40,3 +40,4 @@ Start with [CONTRIBUTING](../CONTRIBUTING.md), then:
 
 - [ADR 001: Audit manifest content](adr/001-manifest-content.md)
 - [ADR 002: User-defined rules](adr/002-user-rules.md)
+- [ADR 003: Logging](adr/003-logging.md)

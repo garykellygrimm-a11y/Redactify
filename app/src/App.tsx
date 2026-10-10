@@ -614,7 +614,11 @@ function App() {
         onSetViewMode={setViewMode}
       />
       {error && (
-        <div className="border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending">
+        <div
+          className={`border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending whitespace-pre-wrap wrap-break-word ${
+            error.includes("\n") ? "font-mono" : ""
+          }`}
+        >
           {error}
         </div>
       )}

@@ -83,14 +83,15 @@ commit the manifest and lockfile together.
 
 | Tool | Version | Where it is set |
 | --- | --- | --- |
-| Rust | latest stable | `dtolnay/rust-toolchain@stable` in the workflows |
+| Rust | pinned | `channel` in `rust-toolchain.toml` |
 | Node.js | 24 | `node-version` in `ci.yml`, `release.yml`, and `codeql.yml` |
 | Python | 3.11 or newer | needed by `scripts/check-tauri-versions.py` |
 | Knope | pinned | `KNOPE_VERSION` in `prepare-release.yml` and `release.yml` |
 
-CI always uses the newest stable Rust, so a new Rust release can introduce
-clippy warnings on a pull request that changed nothing related. Fix them like
-any other clippy failure.
+`rust-toolchain.toml` sets the Rust version for every `cargo` command run in
+the repository, locally and in CI. rustup reads it and installs that version,
+with `rustfmt` and `clippy`, the first time it is needed. To upgrade Rust,
+change `channel` and fix any new clippy warnings in the same pull request.
 
 Knope is downloaded directly rather than through an action, so Dependabot
 cannot see it. Upgrade it by hand, keeping both workflows on the same version.

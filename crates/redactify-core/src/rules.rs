@@ -675,7 +675,10 @@ pub fn load_rules_file(path: &Path) -> Result<Vec<Rule>, RedactifyError> {
         path: path.display().to_string(),
         source,
     })?;
-    parse_rules(&text, USER_PATTERN_SIZE_LIMIT)
+    parse_rules(&text, USER_PATTERN_SIZE_LIMIT).map_err(|cause| RedactifyError::RulesFile {
+        path: path.display().to_string(),
+        cause: Box::new(cause),
+    })
 }
 
 /// Merge user rules over builtins. A user rule whose id matches a builtin
@@ -779,6 +782,23 @@ enabled = false
             }
             other => panic!("expected RulesParse, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn load_error_names_the_file() {
+        let path =
+            std::env::temp_dir().join(format!("redactify-load-error-{}.toml", std::process::id()));
+        std::fs::write(&path, "[[rule]]\nid = \"x\"\nname = \"X\"\npattern = 'a'\n")
+            .expect("write temp rules file");
+        let result = load_rules_file(&path);
+        let _ = std::fs::remove_file(&path);
+
+        let message = result.expect_err("should fail").to_string();
+        assert!(
+            message.starts_with(&format!("rules file '{}': ", path.display())),
+            "{message}"
+        );
+        assert!(message.contains("unknown field `rule`"), "{message}");
     }
 
     #[test]

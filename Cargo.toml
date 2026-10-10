@@ -3,4 +3,4 @@ resolver = "2"
 members = ["crates/redactify-core", "crates/redactify-cli", "app/src-tauri"]
 
 [workspace.package]
-version = "0.6.2"
+version = "0.7.0"

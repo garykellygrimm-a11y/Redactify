@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v7
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install
-      - uses: taiki-e/install-action@v2.87.22
+      - uses: taiki-e/install-action@v2.87.23
         with:
           tool: cargo-audit
       - name: Scan dependencies against the RustSec advisory database

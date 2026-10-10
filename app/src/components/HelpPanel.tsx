@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 
 interface Props {
   open: boolean;
@@ -51,6 +52,14 @@ const GROUPS: ShortcutGroup[] = [
 ];
 
 export function HelpPanel({ open, onClose }: Props) {
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(null));
+  }, []);
+
   // Self-contained: this panel manages its own Escape-to-close rather
   // than relying on App's review-key effect, which is gated on having a
   // document open — help should work with or without one.
@@ -106,6 +115,11 @@ export function HelpPanel({ open, onClose }: Props) {
             </div>
           ))}
         </div>
+        {version && (
+          <div className="mt-4 border-t border-border pt-3 text-xs text-muted">
+            Redactify {version}
+          </div>
+        )}
       </div>
     </div>
   );

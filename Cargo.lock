@@ -2798,7 +2798,7 @@ dependencies = [
 
 [[package]]
 name = "redactify-app"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "redactify-core",
  "serde",
@@ -2812,7 +2812,7 @@ dependencies = [
 
 [[package]]
 name = "redactify-cli"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "clap",
  "rayon",
@@ -2822,7 +2822,7 @@ dependencies = [
 
 [[package]]
 name = "redactify-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "base64 0.23.1",
  "bs58",

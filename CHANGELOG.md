@@ -9,6 +9,24 @@ Redactify ships as one product: the desktop app and the CLI share a version
 number and a release. Entries below are written by Knope from conventional
 commits and changesets.
 
+## 0.8.0 (2026-10-10)
+
+### Breaking Changes
+
+- reject unknown keys in rules files
+
+### Features
+
+- live match highlighting for candidate patterns
+- translate globs to regex
+- show the app version in the shortcuts panel
+
+### Fixes
+
+- enable Export for documents with no findings
+- keep line breaks in the error banner
+- name the file in rules file errors
+
 ## 0.7.0 (2026-10-10)
 
 ### Breaking Changes

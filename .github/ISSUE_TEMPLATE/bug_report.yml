@@ -7,14 +7,14 @@ body:
       value: |
         Thanks for taking the time to report a bug. If this might be a
         **security vulnerability**, please use private reporting instead —
-        see [SECURITY.md](../../SECURITY.md).
+        see [SECURITY.md](https://github.com/garykellygrimm-a11y/Redactify/blob/main/SECURITY.md).
 
   - type: input
     id: version
     attributes:
       label: Redactify version
-      description: Shown in the app under Help, or via `redactify --version`
-      placeholder: "0.4.4"
+      description: For the desktop app, the version in the installer's file name (for example, Redactify_0.6.2_x64-setup.exe). For the CLI, run `redactify-cli --version`.
+      placeholder: "0.6.2"
     validations:
       required: true
 
@@ -74,7 +74,7 @@ body:
     attributes:
       label: Relevant output or error text
       description: |
-        Terminal output, or the browser devtools console (F12 in the app)
-        for frontend issues. Please redact anything sensitive before
-        pasting — yes, we see the irony.
+        CLI output, or the text of any error message shown in the app.
+        Please redact anything sensitive before pasting — yes, we see the
+        irony.
       render: shell

@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check the [roadmap](../../README.md#roadmap) first — it may already
+        Check the [roadmap](https://github.com/garykellygrimm-a11y/Redactify/blob/main/docs/roadmap.md) first — it may already
         be planned, in which case a 👍 on this issue still helps prioritize it.
 
   - type: textarea

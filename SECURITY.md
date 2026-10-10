@@ -14,8 +14,8 @@ to reproduce.
 
 | Version | Supported |
 | --- | --- |
-| 0.4.x | Yes |
-| < 0.4 | No |
+| 0.6.x | Yes |
+| < 0.6 | No |
 
 Fixes land in the latest release only.
 
@@ -47,8 +47,9 @@ Fixes land in the latest release only.
   of every finding — and of the document as a whole — is the control that makes
   redaction trustworthy. Treat any claim of automatic, complete redaction with
   suspicion, including from this tool.
-- **Signed builds.** Release artifacts are currently unsigned. Verify the
-  SHA-256 checksums published with each release before running a download.
+- **Signed builds.** Release artifacts are currently unsigned. Each CLI archive
+  is published with a SHA-256 checksum file; verify it before running the
+  download. The desktop installers do not yet have checksum files.
 
 ## Known advisories in dependencies
 

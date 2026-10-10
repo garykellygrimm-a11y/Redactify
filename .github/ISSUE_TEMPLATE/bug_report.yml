@@ -13,7 +13,7 @@ body:
     id: version
     attributes:
       label: Redactify version
-      description: For the desktop app, the version in the installer's file name (for example, Redactify_0.6.2_x64-setup.exe). For the CLI, run `redactify-cli --version`.
+      description: For the desktop app, press `?` and read the version at the bottom of the shortcuts panel (versions after 0.6.2), or use the version in the installer's file name. For the CLI, run `redactify-cli --version`.
       placeholder: "0.6.2"
     validations:
       required: true

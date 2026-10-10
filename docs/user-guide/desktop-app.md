@@ -90,7 +90,7 @@ launches.
 ## Keyboard shortcuts
 
 On macOS, use `Cmd` wherever this table shows `Ctrl`. Press `?` in the app to
-see this list.
+see this list; the panel also shows the app's version.
 
 | Keys | Action |
 | --- | --- |

@@ -31,7 +31,7 @@ export const VerdictStrip = memo(function VerdictStrip({
   }
 
   const { accepted, rejected, pending } = tally(review);
-  const ready = pending === 0 && review.states.length > 0;
+  const ready = pending === 0;
 
   return (
     <footer className="flex h-11 shrink-0 items-center gap-4 border-t border-border bg-surface-raised px-4 text-sm">

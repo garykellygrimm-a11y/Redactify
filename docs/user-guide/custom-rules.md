@@ -28,7 +28,8 @@ Every rule needs all three fields:
 | `name` | Human-readable name shown in the app. |
 | `pattern` | The regular expression to match. |
 
-Other keys are ignored.
+Any other key is an error, so a misspelled key such as `[[rule]]` is reported
+instead of silently ignored.
 
 Write patterns in single quotes (`'...'`), as above. TOML treats single-quoted
 strings literally, so a backslash stays a backslash. In double quotes, every
@@ -101,6 +102,7 @@ See [ADR 002](../adr/002-user-rules.md) for the reasoning.
 | Look-around in a pattern | `... look-around, including look-ahead and look-behind, is not supported` |
 | Two rules with the same `id` | `duplicate rule id 'a' in rules file` |
 | A missing field | ``invalid rules file: TOML parse error ... missing field `name` `` |
+| An unknown key | ``invalid rules file: TOML parse error ... unknown field `rule`, expected `rules` `` |
 
 ## Testing a pattern in the app
 

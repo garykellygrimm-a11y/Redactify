@@ -65,8 +65,8 @@ You can export once no findings are pending.
   and asks the first time.
 
 The **Export** button in the status strip is disabled while any finding is
-pending. It is also disabled for a file with no findings at all; use `Ctrl+E`
-or **File → Export** to export such a file with its manifest.
+pending. A file with no findings can be exported straight away; its manifest
+records that the file was scanned and nothing was found.
 
 Each export writes two files:
 

@@ -569,12 +569,14 @@ fn us_routing_number_is_valid(matched: &str) -> bool {
 /// can't be deserialized directly — patterns arrive as strings and must
 /// survive validation before becoming a `Rule`.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RuleFile {
     #[serde(default)]
     rules: Vec<RuleSpec>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RuleSpec {
     id: String,
     name: String,
@@ -741,6 +743,41 @@ pattern = 'b+'
         match parse_rules(text, USER_PATTERN_SIZE_LIMIT) {
             Err(RedactifyError::DuplicateRuleId { id }) => assert_eq!(id, "twin"),
             other => panic!("expected DuplicateRuleId, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn misspelled_table_name_fails() {
+        // Without deny_unknown_fields, `[[rule]]` parsed as a file with zero
+        // rules and the scan ran without them.
+        let text = r#"
+[[rule]]
+id = "badge"
+name = "Badge Number"
+pattern = '\bBDG-\d{6}\b'
+"#;
+        match parse_rules(text, USER_PATTERN_SIZE_LIMIT) {
+            Err(RedactifyError::RulesParse(e)) => {
+                assert!(e.to_string().contains("unknown field `rule`"), "{e}")
+            }
+            other => panic!("expected RulesParse, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unknown_rule_field_fails() {
+        let text = r#"
+[[rules]]
+id = "badge"
+name = "Badge Number"
+pattern = '\bBDG-\d{6}\b'
+enabled = false
+"#;
+        match parse_rules(text, USER_PATTERN_SIZE_LIMIT) {
+            Err(RedactifyError::RulesParse(e)) => {
+                assert!(e.to_string().contains("unknown field `enabled`"), "{e}")
+            }
+            other => panic!("expected RulesParse, got {other:?}"),
         }
     }
 

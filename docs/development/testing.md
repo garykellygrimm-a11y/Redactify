@@ -51,6 +51,7 @@ by hand. No automated test reads them.
 | `sample.log` | A short log with findings for several common rules |
 | `custom-sample.log` | Input for trying custom rules, with `examples/custom-rules.toml` |
 | `big.log` | 30,000 lines, for checking performance and scrolling |
+| `invalid-rules.toml` | A rules file that must fail to load, for checking how each front end shows a rules error |
 
 ## Corpus scanning
 

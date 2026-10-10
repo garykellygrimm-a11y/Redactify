@@ -1,0 +1,5 @@
+# Deliberately invalid: [[rule]] instead of [[rules]].
+[[rule]]
+id = "x"
+name = "X"
+pattern = 'a'

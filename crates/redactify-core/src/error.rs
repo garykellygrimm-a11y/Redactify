@@ -20,7 +20,7 @@ pub enum RedactifyError {
 
     /// Rules file is not valid TOML / does not match the expected schema.
     /// The toml error carries line and column information.
-    #[error("invalid rules file: {0}")]
+    #[error("{0}")]
     RulesParse(#[from] toml::de::Error),
 
     /// A user-supplied pattern failed to compile (bad syntax, unsupported
@@ -31,4 +31,11 @@ pub enum RedactifyError {
     /// Two rules in the same file share an id.
     #[error("duplicate rule id '{id}' in rules file")]
     DuplicateRuleId { id: String },
+
+    /// A rules file was read but could not be loaded; `cause` says why.
+    #[error("rules file '{path}': {cause}")]
+    RulesFile {
+        path: String,
+        cause: Box<RedactifyError>,
+    },
 }

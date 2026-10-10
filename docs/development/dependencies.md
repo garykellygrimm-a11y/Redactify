@@ -88,9 +88,6 @@ commit the manifest and lockfile together.
 | Python | 3.11 or newer | needed by `scripts/check-tauri-versions.py` |
 | Knope | pinned | `KNOPE_VERSION` in `prepare-release.yml` and `release.yml` |
 
-`prepare-release.yml` also installs Node, on the current LTS line (`lts/*`)
-rather than 24. It builds nothing, so this does not affect what is released.
-
 CI always uses the newest stable Rust, so a new Rust release can introduce
 clippy warnings on a pull request that changed nothing related. Fix them like
 any other clippy failure.

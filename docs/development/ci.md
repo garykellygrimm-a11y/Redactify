@@ -12,8 +12,9 @@ A pull request into `main` cannot merge until these pass:
 - Frontend type-check and build
 - cargo audit
 - docs-updated
+- Enforce Naming Policy
 
-The branch-name check and CodeQL also run but are not required.
+CodeQL also runs but is not required.
 
 ## Format, Lint, Test
 

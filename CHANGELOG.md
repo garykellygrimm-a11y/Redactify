@@ -9,6 +9,12 @@ Redactify ships as one product: the desktop app and the CLI share a version
 number and a release. Entries below are written by Knope from conventional
 commits and changesets.
 
+## 0.7.1 (2026-10-11)
+
+### Features
+
+- publish an .rpm package
+
 ## 0.7.0 (2026-10-10)
 
 ### Breaking Changes

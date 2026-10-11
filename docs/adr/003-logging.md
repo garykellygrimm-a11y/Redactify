@@ -65,9 +65,21 @@ function that takes a `LogEvent` enum. Its variants carry only allowlisted
 values: counts, sizes, durations, rule ids, and error categories. Nothing
 else in the app calls `log::info!` or its siblings directly. The compiler
 then enforces most of the allowlist: a path or a line of text has no variant
-to go in. Clippy's `disallowed_macros` lint, configured in `clippy.toml`,
-bans the `log` macros everywhere except the logging module, and CI's
-`-D warnings` turns a direct call into a build failure.
+to go in. CI makes a direct call a build failure: a `clippy.toml` in
+`app/src-tauri/` configures three bans, and CI's `-D warnings` turns any
+violation into an error.
+
+- `disallowed-macros` bans `log::log`. Every level macro, from `trace!` to
+  `error!`, expands through it, so banning it covers them all. The logging
+  module allows the lint for itself.
+- `disallowed-methods` bans `log::logger`, which reaches the logger through a
+  function call that the macro lint cannot see.
+- `disallowed-macros` also bans `std::println`, `std::eprintln`, and
+  `std::dbg`, because a desktop app's stdout and stderr can still reach a
+  system log.
+
+The file sits in the app crate rather than the repository root so these bans
+do not apply to the CLI, which writes to stderr by design.
 
 **Errors are logged by category, not by message.** The messages commands
 return to the user name files on purpose, such as `Could not read '<path>'`.
@@ -120,9 +132,12 @@ error handling, so it covers failures as well as the normal path:
 
 - opening, scanning, and saving a document
 - opening a path that does not exist
+- saving to an output path that cannot be written
+- loading a rules file from a path that does not exist
 - loading a rules file with an invalid pattern
 - loading a rules file with a TOML syntax error
 - previewing a pattern in the pattern tester
+- a panic whose message contains the canary, which tests the panic hook
 
 This turns the never-logged list into a CI check.
 

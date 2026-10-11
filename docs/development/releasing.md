@@ -6,7 +6,8 @@ one GitHub release carries the installers and the CLI archives.
 
 ## How a release happens
 
-1. On every push to `main`, the `Prepare Release` workflow runs Knope. If
+1. On every push to `main` except the merge of the release pull request
+   itself, the `Prepare Release` workflow runs Knope. If
    there are releasable changes since the last tag, Knope bumps the version,
    writes a `CHANGELOG.md` section, force-pushes the result to the
    `chore/release` branch, and opens or updates one pull request titled
@@ -84,8 +85,7 @@ workflows there replaces Knope's built-in commands.
 - Both workflows authenticate with the `RELEASE_PLZ_TOKEN` secret, a
   fine-grained personal access token. A push made with the built-in
   `GITHUB_TOKEN` does not trigger checks on the release pull request, which
-  is why the token is needed. Every write goes through this token, so
-  neither workflow gives the built-in `GITHUB_TOKEN` write access.
+  is why the token is needed.
 - The repository allows merge commits only. Knope reads each conventional
   commit individually, and squashing would collapse a pull request into one
   message it may not recognize.

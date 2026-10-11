@@ -1,6 +1,6 @@
 # ADR 003: Logging — desktop app only, allowlisted content, no document data
 
-Status: proposed · Date: 2026-10-10
+Status: accepted · Date: 2026-10-10
 
 ## Context
 

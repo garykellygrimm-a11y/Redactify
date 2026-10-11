@@ -5,8 +5,9 @@ suits scripts, pipelines, and bulk processing. For human review of each
 finding, use the [desktop app](desktop-app.md).
 
 The executable is `redactify-cli` (`redactify-cli.exe` on Windows). It
-identifies itself as `redactify` in `--version` output; the command you run is
-still `redactify-cli`.
+identifies itself as `redactify-cli` in `--help`, `--version`, and usage-error
+output. The `tool` field of the manifests it writes uses a different form; see
+[Manifest format](../reference/manifest-format.md).
 
 It has three subcommands, and one is always required:
 

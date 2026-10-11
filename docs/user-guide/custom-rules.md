@@ -109,8 +109,7 @@ Every error starts with the path of the rules file, such as
 
 ## Testing a pattern in the app
 
-The pattern tester was added after version 0.6.2 and ships in the next
-release.
+The pattern tester was added in version 0.7.0.
 
 The **Rules** tab in the sidebar has a pattern tester. Type a pattern, and
 every match in the open document is highlighted as you type, with an exact

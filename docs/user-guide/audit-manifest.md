@@ -12,16 +12,16 @@ A shortened example:
 
 ```json
 {
-  "tool": "redactify 0.6.2",
-  "created_utc": "2026-10-09T00:50:49Z",
-  "source_sha256": "73a10528f45f8844c232ef699948f63725af6960bff04eb12bf51d3b59ff7163",
-  "output_sha256": "4b1ff7581d15baccca6a54b5237d49b841f23fb011822f29c3838aa519749312",
+  "tool": "redactify 0.7.1",
+  "created_utc": "2026-10-11T18:48:11Z",
+  "source_sha256": "c62fbcef8d3e7b836dc71575bd5d9b6f655bb579ec670e3f38a4a71b356a8245",
+  "output_sha256": "e3538b96c46ce68a5ba094a4ec08ac54e006ace0bedd849102fd24da9e2246b7",
   "rules_applied": ["email", "ipv4", "ssn"],
   "finding_count": 2,
   "applied_count": 2,
   "findings": [
-    { "rule_id": "email", "start": 32, "end": 53, "length": 21, "disposition": "accepted" },
-    { "rule_id": "ipv4", "start": 69, "end": 82, "length": 13, "disposition": "accepted" }
+    { "rule_id": "email", "start": 31, "end": 51, "length": 20, "disposition": "accepted" },
+    { "rule_id": "ipv4", "start": 57, "end": 70, "length": 13, "disposition": "accepted" }
   ]
 }
 ```

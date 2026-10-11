@@ -23,8 +23,8 @@ decisions.
 ## The window
 
 - **The sidebar** has two tabs. **Findings** lists every finding, grouped by
-  rule. **Rules** lists every active rule and, in releases after 0.6.2, holds
-  the pattern tester; see [Custom rules](custom-rules.md).
+  rule. **Rules** lists every active rule and, from version 0.7.0, holds the
+  pattern tester; see [Custom rules](custom-rules.md).
 - **The document** shows the file with each finding highlighted. Accepted
   findings appear as `[REDACTED:<rule_id>]`, so the document is a live preview
   of the output.

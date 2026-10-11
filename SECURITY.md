@@ -14,8 +14,8 @@ to reproduce.
 
 | Version | Supported |
 | --- | --- |
-| 0.6.x | Yes |
-| < 0.6 | No |
+| 0.7.x | Yes |
+| < 0.7 | No |
 
 Fixes land in the latest release only.
 

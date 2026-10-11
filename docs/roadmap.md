@@ -12,18 +12,19 @@ described in detail in [CHANGELOG.md](../CHANGELOG.md).
 | 0.6.0 | `redactify-cli verify`, `redactify-cli batch`, 8 new detection rules including checksum-validated IBAN, routing number, Canadian SIN, and Bitcoin address, and capture-group support for rules |
 | 0.6.1 | Rules panel in the sidebar; fixed menu shortcuts; fixed false positives in `us_phone`, `credit_card`, and `ipv6` |
 | 0.6.2 | Release fix aligning the version across the workspace |
+| 0.7.0 | Live match highlighting for candidate patterns, wildcard patterns translated to regular expressions, the app version in the shortcuts panel; rules files now reject unknown keys; Export enabled for documents with no findings |
+| 0.7.1 | `.rpm` package |
 
 ## In progress: v0.7 — Rule authoring in the app
 
 Writing custom rules without leaving the app or knowing regular expressions.
 Rules are saved to the same TOML format the CLI reads, so nothing authored in
-the app is locked into it.
+the app is locked into it. The remaining items ship in 0.7.x releases.
 
 - [x] Rules panel listing every active rule (0.6.1)
-- [x] Live match highlighting while testing a pattern (merged, not yet
-      released)
+- [x] Live match highlighting while testing a pattern (0.7.0)
 - [x] Simple mode: wildcard patterns such as `*@example.com` translated to a
-      regular expression (merged, not yet released)
+      regular expression (0.7.0)
 - [ ] Save a tested pattern as a rule, and keep it between launches
 - [ ] Keep existing review decisions when a rule is added mid-review
 - [ ] Select-to-suggest: highlight an example in the document and get ranked

@@ -47,9 +47,11 @@ Fixes land in the latest release only.
   of every finding — and of the document as a whole — is the control that makes
   redaction trustworthy. Treat any claim of automatic, complete redaction with
   suspicion, including from this tool.
-- **Signed builds.** Release artifacts are currently unsigned. Each CLI archive
-  is published with a SHA-256 checksum file; verify it before running the
-  download. The desktop installers do not yet have checksum files.
+- **Signed builds.** Release artifacts are currently unsigned. Releases are
+  immutable, and GitHub publishes a SHA-256 digest and an attestation for
+  every file. Verify a download before running it, with
+  `gh release verify-asset <tag> <file>` or by comparing its hash with the
+  digest on the release page. CLI archives also carry a `.sha256` file.
 
 ## Known advisories in dependencies
 

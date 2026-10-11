@@ -48,9 +48,19 @@ Builds are unsigned. Windows SmartScreen will warn: choose **More info**, then
 **Open**, or run `xattr -d com.apple.quarantine`. AppImages need `chmod +x`
 before they run.
 
-Every CLI archive has a `.sha256` file beside it. Verifying a download before
-running it is good practice, and especially fitting for this tool. Releases
-are tested by hand on Windows; the macOS and Linux builds are produced by CI.
+Verifying a download before running it is good practice, and especially
+fitting for this tool. Releases are immutable, so their files cannot be
+changed after publishing, and GitHub shows a SHA-256 digest beside every
+file on the release page. Compare it with the hash of your download, or let
+the GitHub CLI check it:
+
+```console
+$ gh release verify-asset <tag> <downloaded-file>
+```
+
+CLI archives also have a `.sha256` file beside them for checking offline.
+Releases are tested by hand on Windows; the macOS and Linux builds are
+produced by CI.
 
 ## Quick start
 

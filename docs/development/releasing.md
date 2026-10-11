@@ -85,7 +85,8 @@ workflows there replaces Knope's built-in commands.
 - Both workflows authenticate with the `RELEASE_PLZ_TOKEN` secret, a
   fine-grained personal access token. A push made with the built-in
   `GITHUB_TOKEN` does not trigger checks on the release pull request, which
-  is why the token is needed.
+  is why the token is needed. Every write goes through this token, so
+  neither workflow gives the built-in `GITHUB_TOKEN` write access.
 - The repository allows merge commits only. Knope reads each conventional
   commit individually, and squashing would collapse a pull request into one
   message it may not recognize.

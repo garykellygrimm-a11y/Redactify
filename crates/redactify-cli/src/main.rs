@@ -9,7 +9,7 @@ use redactify_core::{Manifest, Rule, builtin_rules, detect, load_rules_file, mer
 use walkdir::WalkDir;
 
 #[derive(Parser)]
-#[command(name = "redactify", version, about)]
+#[command(version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

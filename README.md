@@ -41,12 +41,19 @@ Installers and binaries for the latest release are on the
 | --- | --- | --- |
 | Windows | `.exe` installer or `.msi` | `redactify-cli-windows-x64.zip` |
 | macOS | `.dmg` (universal) | `redactify-cli-macos-arm64.tar.gz` |
-| Linux | `.AppImage` or `.deb` | `redactify-cli-linux-x64.tar.gz` |
+| Linux | `.AppImage`, `.deb`, or `.rpm` | `redactify-cli-linux-x64.tar.gz` |
 
 Builds are unsigned. Windows SmartScreen will warn: choose **More info**, then
 **Run anyway**. macOS may report the app as damaged: right-click it and choose
 **Open**, or run `xattr -d com.apple.quarantine`. AppImages need `chmod +x`
 before they run.
+
+On Linux, the desktop app needs WebKitGTK 4.1. The `.deb` installs it on
+Ubuntu 22.04 or Debian 12 and newer. The `.rpm` installs it on Fedora, and on
+RHEL or Oracle Linux 10 with EPEL enabled. RHEL, Oracle Linux, Rocky Linux,
+and AlmaLinux 9 do not provide WebKitGTK 4.1, so the desktop app does not run
+there, and the `.rpm` refuses to install rather than install an app that
+cannot start.
 
 Verifying a download before running it is good practice, and especially
 fitting for this tool. Releases are immutable, so their files cannot be

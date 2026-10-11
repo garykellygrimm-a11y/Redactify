@@ -95,7 +95,7 @@ jobs:
           mkdir -p staging
           find target -path '*/release/bundle/*' \
             \( -name '*-setup.exe' -o -name '*.msi' -o -name '*.dmg' \
-               -o -name '*.AppImage' -o -name '*.deb' \) \
+               -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) \
             -exec cp {} staging/ \;
           ls -la staging
           # Fail loudly rather than ship an empty release.

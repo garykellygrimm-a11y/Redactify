@@ -38,13 +38,18 @@ for the app:
 | Linux | `$XDG_DATA_HOME/com.garykellygrimm.redactify/logs`, or `~/.local/share/…` when unset |
 
 Files rotate at 1 MB with `RotationStrategy::KeepSome(2)`: the active file
-plus two archives, at most about 3 MB. The plugin's default deletes the whole
+plus two archives, about 3 MB in all. The plugin's default deletes the whole
 file at its size limit, losing the history right before a failure.
-`KeepSome(0)` is never used; the plugin does not guard against it.
+`KeepSome(0)` is never used; the plugin does not guard against it. The bound
+is approximate: two rotations within one second leave a `.bak` file that the
+plugin's cleanup never removes.
 
-On macOS and Linux the log directory is created with mode `0700` before the
-plugin starts, so other local users cannot read it. On Windows the directory
-is already private to the user.
+On macOS and Linux the log directory is set to mode `0700` before the plugin
+starts, so other local users cannot read it. The mode is set explicitly after
+creating the directory, because a mode given at creation does not change a
+directory left by an earlier build; a test checks the result. On Windows the
+directory inherits the user profile's permissions, which allow the user,
+SYSTEM, and Administrators.
 
 **Level: `info` and above in release builds.** `debug` is available in
 development builds only.
@@ -60,7 +65,9 @@ function that takes a `LogEvent` enum. Its variants carry only allowlisted
 values: counts, sizes, durations, rule ids, and error categories. Nothing
 else in the app calls `log::info!` or its siblings directly. The compiler
 then enforces most of the allowlist: a path or a line of text has no variant
-to go in.
+to go in. Clippy's `disallowed_macros` lint, configured in `clippy.toml`,
+bans the `log` macros everywhere except the logging module, and CI's
+`-D warnings` turns a direct call into a build failure.
 
 **Errors are logged by category, not by message.** The messages commands
 return to the user name files on purpose, such as `Could not read '<path>'`.
@@ -72,8 +79,10 @@ logged.
 
 - The app version, OS, and architecture at startup.
 - Which command ran and whether it succeeded or failed, by category.
-- Counts and sizes: findings per rule, rules loaded, file size in bytes, and
-  the file's extension.
+- Counts and sizes: findings per rule, rules loaded, and file size in bytes.
+- The file's type, from a fixed list such as `txt`, `log`, `csv`, and `json`,
+  or `other`. The raw extension is not logged: in `report.John Smith`, the
+  extension is `John Smith`.
 - Elapsed time.
 - Rule ids, escaped with `{:?}` so a line break in an id cannot forge a log
   line.
@@ -104,9 +113,17 @@ built for air-gapped use, with no telemetry, local-only is the deliberate
 privacy choice.
 
 **An automated test proves it.** The pull request that adds logging includes
-a test that captures every log record, then opens, scans, and saves a fixture
-and loads a rules file, with a canary string in the file names, the document
-text, and a rule pattern. The test fails if the canary appears in any record.
+a test that captures every log record while it runs the app's commands with
+a canary string in the file names, the document text, and rule patterns. The
+test fails if the canary appears in any record. Leaks are most likely in
+error handling, so it covers failures as well as the normal path:
+
+- opening, scanning, and saving a document
+- opening a path that does not exist
+- loading a rules file with an invalid pattern
+- loading a rules file with a TOML syntax error
+- previewing a pattern in the pattern tester
+
 This turns the never-logged list into a CI check.
 
 ## Consequences
@@ -118,7 +135,8 @@ This turns the never-logged list into a CI check.
   the full message in the app; the log cannot leak what it never records.
 - Rule ids are logged, and an id can itself name something sensitive. This
   matches the manifest, which already records the ids of the rules applied.
-  Teams that treat their rule ids as sensitive should name them neutrally.
+  Teams that treat their rule ids as sensitive should name them neutrally,
+  and the custom rules guide should say so where rule authors will see it.
 - Third-party crates are silent in the log, so a failure inside Tauri itself
   leaves no trace there. When one is needed, it is enabled for that crate in
   a development build, never in a release.

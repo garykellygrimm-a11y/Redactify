@@ -1,6 +1,6 @@
 # ADR 003: Logging — desktop app only, typed events, no document data
 
-Status: proposed · Date: 2026-10-10
+Status: accepted · Date: 2026-10-10
 
 ## Context
 
@@ -66,7 +66,7 @@ values: counts, sizes, durations, rule ids, and error categories. Nothing
 else in the app calls `log::info!` or its siblings directly. The compiler
 then enforces most of the allowlist: a path or a line of text has no variant
 to go in. CI makes a direct call a build failure: a `clippy.toml` in
-`app/src-tauri/` configures three bans, and CI's `-D warnings` turns any
+`app/src-tauri/` configures these bans, and CI's `-D warnings` turns any
 violation into an error.
 
 - `disallowed-macros` bans `log::log`. Every level macro, from `trace!` to
@@ -74,9 +74,10 @@ violation into an error.
   module allows the lint for itself.
 - `disallowed-methods` bans `log::logger`, which reaches the logger through a
   function call that the macro lint cannot see.
-- `disallowed-macros` also bans `std::println`, `std::eprintln`, and
-  `std::dbg`, because a desktop app's stdout and stderr can still reach a
-  system log.
+- `disallowed-macros` also bans `std::print`, `std::println`, `std::eprint`,
+  `std::eprintln`, and `std::dbg`, and `disallowed-methods` bans
+  `std::io::stdout` and `std::io::stderr`, because a desktop app's stdout and
+  stderr can still reach a system log.
 
 The file sits in the app crate rather than the repository root so these bans
 do not apply to the CLI, which writes to stderr by design.

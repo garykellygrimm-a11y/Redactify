@@ -13,8 +13,13 @@ A pull request into `main` cannot merge until these pass:
 - cargo audit
 - docs-updated
 - Enforce Naming Policy
+- CodeQL Logic Scan (javascript-typescript)
+- CodeQL Logic Scan (rust)
+- Frontend Quality Scan
 
-CodeQL also runs but is not required.
+The branch must also be up to date with `main`; use **Update branch** on the
+pull request if it falls behind. CodeQL's findings are enforced separately by
+the code scanning rule; see [CodeQL](#codeql).
 
 ## Format, Lint, Test
 
@@ -136,6 +141,14 @@ Two jobs:
 - **Frontend Quality Scan** runs HTMLHint and Stylelint over the HTML and CSS.
 
 Findings appear in the repository's Security tab under code scanning.
+
+The ruleset protecting `main` requires CodeQL results. A pull request cannot
+merge until CodeQL's analysis of it has finished, or while CodeQL reports an
+alert of error severity or a security alert of high severity or above.
+
+**On failure:** open the alert from the pull request's checks. Fix the code,
+or, if the alert is a false positive, dismiss it in the Security tab with a
+reason so the decision is recorded.
 
 ## Release workflows
 

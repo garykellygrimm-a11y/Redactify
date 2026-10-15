@@ -14,6 +14,7 @@ Run these from this directory:
 ```console
 $ npm ci                      # install dependencies exactly as locked
 $ npm run tauri dev           # run the app with hot reload
+$ npm test                    # run the frontend tests, as CI does
 $ npm run build               # type-check and build the frontend, as CI does
 ```
 

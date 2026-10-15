@@ -2,13 +2,25 @@
 
 ## Running the tests
 
-From the repository root:
+The Rust tests run from the repository root:
 
 ```console
 $ cargo test --all --locked
 ```
 
-Automated tests live in `redactify-core` and the desktop app's Rust side:
+The frontend tests use [Vitest](https://vitest.dev/) and run from `app/`:
+
+```console
+$ npm test
+```
+
+`npm test` runs `vitest run`, which runs every test file under `app/`, such as
+`*.test.ts`, once and exits. Vitest reads `app/vite.config.ts`, so it needs no separate
+configuration. `npm run build` type-checks the test files along with the rest
+of `app/src/`.
+
+Automated tests live in `redactify-core`, the desktop app's Rust side, and
+the desktop app's frontend:
 
 | File | Covers |
 | --- | --- |
@@ -17,10 +29,11 @@ Automated tests live in `redactify-core` and the desktop app's Rust side:
 | `crates/redactify-core/src/rules_write.rs` | Appending a rule to a rules file: comments kept, invalid rules and files refused, permissions kept, symlinks written through |
 | `crates/redactify-core/src/manifest.rs` | Manifest contents, JSON round-trips, and `verify` |
 | `app/src-tauri/src/lib.rs` | Activating a rules file, a rules file that fails to load, making an existing config folder private, and rescanning with the active rules |
+| `app/src/review.test.ts` | The review log in `app/src/review.ts`: deciding one finding or a whole rule, undo, moving focus, and the accepted, rejected, and pending tally |
 
-`redactify-cli` and the desktop app's React frontend have no automated tests
-yet. Changes to either are checked by building them and exercising them by
-hand.
+`redactify-cli` has no automated tests yet. In the frontend, only the review
+logic is tested; React components are not. Changes to the CLI or to
+components are checked by building them and exercising them by hand.
 
 ## Testing a detection rule
 

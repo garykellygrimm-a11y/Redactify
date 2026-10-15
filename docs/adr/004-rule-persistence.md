@@ -1,6 +1,6 @@
 # ADR 004: Rule persistence — one remembered rules file, decisions kept across rescans
 
-Status: proposed · Date: 2026-10-14
+Status: approved · Date: 2026-10-14
 
 ## Context
 

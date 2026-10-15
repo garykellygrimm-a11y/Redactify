@@ -57,7 +57,7 @@ Add `--no-builtins` to scan with only your rules.
 
 The desktop app has at most one active rules file. Its rules are merged over
 the builtin rules, and its name and the number of active rules are shown in
-the top bar.
+the top bar, as `rules: <file name> · <count>`.
 
 The app remembers the active file's path in `settings.json` in its config
 folder and loads the file again at startup. The config folder is Tauri's
@@ -79,7 +79,8 @@ reason.
 If the remembered file is missing or invalid at startup, the app does not
 skip it silently. The banner shows
 `Your rules file did not load, so only builtin rules are active.` followed by
-the error, and the app scans with builtin rules only. The path stays
+the error, the top bar shows `rules: builtin only`, and the app scans with
+builtin rules only. The path stays
 remembered, so the same error appears at each launch until the file is fixed
 or another file is loaded. Fix the file, then load it again with
 **File → Load Rules**.
@@ -93,7 +94,9 @@ redactify-cli scan input.log --rules "$env:APPDATA\com.garykellygrimm.redactify\
 ```
 
 On macOS and Linux, `settings.json` and a `rules.toml` created by the app are
-readable only by your user (mode `0600`). The app does not encrypt rules
+readable only by your user (mode `0600`), and the app sets its config folder
+to mode `0700`, including when the folder already exists. The app does not
+encrypt rules
 files. Custom rules can reveal what your organization treats as sensitive, so
 protect them as you protect the documents they apply to: use full-disk
 encryption, such as BitLocker, FileVault, or dm-crypt, on machines that hold
@@ -191,13 +194,13 @@ without running across spaces. `*` also matches punctuation, so in
 
 Once the tester holds a valid pattern, fields for a rule id and a name appear
 below it, with a **Save as rule** button. The line beside the button shows
-where the rule will go: the active rules file, or "a new rules file" if none is
-active. In that case the app creates `rules.toml` in its config folder (see
+where the rule will go: `Saves to` followed by the active rules file's name, or
+`Saves to a new rules file` if none is active. In that case the app creates `rules.toml` in its config folder (see
 [The active rules file](#the-active-rules-file)) and makes it active.
 
 In Simple mode, the regular expression the tester generated is saved, not the
 wildcard pattern. The pattern is written in single quotes, as recommended
-above, unless it contains a single quote.
+above, unless it contains a single quote or a control character.
 
 A saved rule is checked exactly like a rule in a loaded file. Nothing is
 written if the pattern is invalid, if the id is already used in the file, or if
@@ -216,7 +219,8 @@ existing file keeps its permissions.
 After saving, the app loads the file again and rescans the open document.
 This resets the review, as loading a rules file does, so any accept or reject
 decisions are lost. If a review is in progress, the app asks for
-confirmation before saving.
+confirmation before saving. If you cancel, nothing is saved and the id and
+name you typed stay in place.
 
 If the remembered rules file failed to load at startup, saving is refused
-until the file is fixed and loaded again with **File → Load Rules**.
+until a rules file loads successfully with **File → Load Rules**.

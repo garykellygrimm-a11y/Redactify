@@ -16,7 +16,7 @@ Automated tests live in `redactify-core` and the desktop app's Rust side:
 | `crates/redactify-core/src/rules.rs` | Loading custom rule files, validation, overrides, and glob-to-regex translation |
 | `crates/redactify-core/src/rules_write.rs` | Appending a rule to a rules file: comments kept, invalid rules and files refused, permissions kept, symlinks written through |
 | `crates/redactify-core/src/manifest.rs` | Manifest contents, JSON round-trips, and `verify` |
-| `app/src-tauri/src/lib.rs` | Activating a rules file, a rules file that fails to load, and rescanning with the active rules |
+| `app/src-tauri/src/lib.rs` | Activating a rules file, a rules file that fails to load, making an existing config folder private, and rescanning with the active rules |
 
 `redactify-cli` and the desktop app's React frontend have no automated tests
 yet. Changes to either are checked by building them and exercising them by

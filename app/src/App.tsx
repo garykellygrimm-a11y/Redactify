@@ -676,11 +676,25 @@ function App() {
       />
       {error && (
         <div
-          className={`border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending whitespace-pre-wrap wrap-break-word ${
-            error.includes("\n") ? "font-mono" : ""
-          }`}
+          role="alert"
+          className="flex items-start gap-3 border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending"
         >
-          {error}
+          <div
+            className={`min-w-0 flex-1 whitespace-pre-wrap wrap-break-word ${
+              error.includes("\n") ? "font-mono" : ""
+            }`}
+          >
+            {error}
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
+            title="Dismiss"
+            className="shrink-0 rounded px-1.5 leading-5 hover:bg-pending/15 focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            ×
+          </button>
         </div>
       )}
       {searchOpen && outcome && (

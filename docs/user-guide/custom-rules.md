@@ -80,7 +80,9 @@ If the remembered file is missing or invalid at startup, the app does not
 skip it silently. The banner shows
 `Your rules file did not load, so only builtin rules are active.` followed by
 the error, the top bar shows `rules: builtin only`, and the app scans with
-builtin rules only. The path stays
+builtin rules only. Dismissing the banner with its Dismiss (`×`) button hides
+the message only; the top bar keeps showing `rules: builtin only`, and the
+file is not loaded again. The path stays
 remembered, so the same error appears at each launch until the file is fixed
 or another file is loaded. Fix the file, then load it again with
 **File → Load Rules**.

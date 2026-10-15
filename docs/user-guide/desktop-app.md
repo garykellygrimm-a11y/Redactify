@@ -25,6 +25,8 @@ confirmation first, because it discards your decisions.
 - **The top bar** shows the active rules file and the number of active rules
   when a rules file is loaded, or `rules: builtin only` when the remembered
   rules file failed to load at startup.
+- **The error banner** appears below the top bar when something goes wrong.
+  Its Dismiss (`×`) button hides the message and changes nothing else.
 - **The sidebar** has two tabs. **Findings** lists every finding, grouped by
   rule. **Rules** lists every active rule and, from version 0.7.0, holds the
   pattern tester, which can also save a tested pattern as a rule; see

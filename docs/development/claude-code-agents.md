@@ -39,9 +39,15 @@ Review its changes like any other diff before committing them.
 
 ## pre-merge-reviewer
 
-Reviews a branch against `main` before its pull request merges. It is
-read-only: it uses read-only git commands and never edits files, builds, runs
-tests, or touches the remote.
+Reviews a branch against `main` before its pull request merges. It has no
+file-editing tools, and its instructions limit it to read-only git commands.
+It does have shell access, though, and a subagent's tool list cannot restrict
+which shell commands it runs. What stops a command that changes something is
+Claude Code's permission prompt, which asks before any shell command outside
+its [built-in read-only set](https://code.claude.com/docs/en/permissions#read-only-commands).
+Run it in the default permission mode: a subagent inherits `acceptEdits`,
+`auto`, or `bypassPermissions` from the main session, and those modes approve
+some or all commands without asking.
 
 **Run it** when a branch is ready for review, after its commits are final and
 before the pull request merges. Because pull requests merge with merge

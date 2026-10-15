@@ -72,6 +72,18 @@ export interface RulesOutcome {
   rules_path: string;
   rule_count: number;
   rescanned: ScanOutcome | null;
+  warning: string | null;
+}
+
+export type SaveRuleResult =
+  | { status: "saved" }
+  | { status: "cancelled" }
+  | { status: "error"; message: string };
+
+export interface RulesStatus {
+  rules_path: string | null;
+  rule_count: number;
+  error: string | null;
 }
 
 /// Mirrors the Rust RuleView: RuleInfo's fields flattened, plus where the
@@ -122,6 +134,7 @@ function App() {
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [review, setReview] = useState<Review>(emptyReview(0));
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
+  const [rulesFailed, setRulesFailed] = useState(false);
   const [rules, setRules] = useState<RuleView[]>([]);
   const [previewPattern, setPreviewPattern] = useState("");
   const [previewSyntax, setPreviewSyntax] = useState<PatternSyntax>("glob");
@@ -259,9 +272,23 @@ function App() {
   }, []);
 
   // The active rule set exists before any document does, so this loads on
-  // mount rather than waiting for a file.
+  // mount rather than waiting for a file. A remembered rules file that
+  // failed to load is reported here, not skipped silently.
   useEffect(() => {
     void refreshRules();
+    invoke<RulesStatus>("rules_status")
+      .then((status) => {
+        if (status.rules_path) {
+          setRulesInfo({ path: status.rules_path, count: status.rule_count });
+        }
+        if (status.error) {
+          setRulesFailed(true);
+          setError(
+            `Your rules file did not load, so only builtin rules are active.\n${status.error}`,
+          );
+        }
+      })
+      .catch((e) => setError(String(e)));
   }, [refreshRules]);
 
   // Debounced — each call rescans the whole document.
@@ -287,6 +314,23 @@ function App() {
     }, 250);
     return () => clearTimeout(timer);
   }, [previewPattern, previewSyntax, outcome]);
+
+  const applyRulesOutcome = useCallback(
+    (result: RulesOutcome) => {
+      setRulesInfo({ path: result.rules_path, count: result.rule_count });
+      setRulesFailed(false);
+      void refreshRules();
+      if (result.rescanned) {
+        setOutcome(result.rescanned);
+        setReview(emptyReview(result.rescanned.findings.length));
+        setExportResult(null);
+        setViewMode("before");
+        setLastExportPath(null);
+      }
+      if (result.warning) setError(result.warning);
+    },
+    [refreshRules],
+  );
 
   const browse = useCallback(async () => {
     const picked = await openDialog({ multiple: false, directory: false });
@@ -316,20 +360,36 @@ function App() {
     if (outcome && !(await confirmDiscard())) return;
     try {
       setError(null);
-      const result = await invoke<RulesOutcome>("load_rules", { path: picked });
-      setRulesInfo({ path: result.rules_path, count: result.rule_count });
-      void refreshRules();
-      if (result.rescanned) {
-        setOutcome(result.rescanned);
-        setReview(emptyReview(result.rescanned.findings.length));
-        setExportResult(null);
-        setViewMode("before");
-        setLastExportPath(null);
-      }
+      applyRulesOutcome(
+        await invoke<RulesOutcome>("load_rules", { path: picked }),
+      );
     } catch (e) {
       setError(String(e));
     }
-  }, [outcome, confirmDiscard, refreshRules]);
+  }, [outcome, confirmDiscard, applyRulesOutcome]);
+
+  const saveRule = useCallback(
+    async (id: string, name: string): Promise<SaveRuleResult> => {
+      // Saving re-scans like a load, which still resets the review.
+      if (outcome && !(await confirmDiscard())) return { status: "cancelled" };
+      try {
+        setError(null);
+        applyRulesOutcome(
+          await invoke<RulesOutcome>("save_rule", {
+            id,
+            name,
+            pattern: previewPattern,
+            syntax: previewSyntax,
+          }),
+        );
+        setPreviewPattern("");
+        return { status: "saved" };
+      } catch (e) {
+        return { status: "error", message: String(e) };
+      }
+    },
+    [outcome, confirmDiscard, applyRulesOutcome, previewPattern, previewSyntax],
+  );
 
   // App-level shortcuts, ungated: Ctrl+O is most useful with nothing open.
   // Duplicated from the native menu accelerators, which never fire.
@@ -606,6 +666,7 @@ function App() {
     <div className="flex h-screen flex-col font-sans">
       <TopBar
         rulesInfo={rulesInfo}
+        rulesFailed={rulesFailed}
         textSize={textSize}
         onChangeTextSize={changeTextSize}
         onOpenHelp={() => setHelpOpen(true)}
@@ -615,11 +676,25 @@ function App() {
       />
       {error && (
         <div
-          className={`border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending whitespace-pre-wrap wrap-break-word ${
-            error.includes("\n") ? "font-mono" : ""
-          }`}
+          role="alert"
+          className="flex items-start gap-3 border-b border-border bg-pending-soft px-4 py-2 text-sm text-pending"
         >
-          {error}
+          <div
+            className={`min-w-0 flex-1 whitespace-pre-wrap wrap-break-word ${
+              error.includes("\n") ? "font-mono" : ""
+            }`}
+          >
+            {error}
+          </div>
+          <button
+            type="button"
+            onClick={() => setError(null)}
+            aria-label="Dismiss"
+            title="Dismiss"
+            className="shrink-0 rounded px-1.5 leading-5 hover:bg-pending/15 focus:outline-none focus:ring-2 focus:ring-accent"
+          >
+            ×
+          </button>
         </div>
       )}
       {searchOpen && outcome && (
@@ -646,6 +721,7 @@ function App() {
             preview={preview}
             previewError={previewError}
             onPreviewPatternChange={setPreviewPattern}
+            onSaveRule={saveRule}
             onFocus={setFocus}
             onDecide={decideOne}
             onDecideGroup={decideGroup}

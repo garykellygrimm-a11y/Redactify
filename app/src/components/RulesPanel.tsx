@@ -1,5 +1,10 @@
-import { memo } from "react";
-import type { PatternPreview, PatternSyntax, RuleView } from "../App";
+import { memo, useState } from "react";
+import type {
+  PatternPreview,
+  PatternSyntax,
+  RuleView,
+  SaveRuleResult,
+} from "../App";
 
 interface Props {
   rules: RuleView[];
@@ -10,18 +15,13 @@ interface Props {
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
+  onSaveRule: (id: string, name: string) => Promise<SaveRuleResult>;
   hasDocument: boolean;
 }
 
 /**
- * Read-only listing of the active rule set. Editing arrives in a later
- * stage; the first thing needed is simply being able to SEE what's
- * running, which until now the app couldn't do at all — it knew only a
- * file path and a count.
- *
- * Not memoized, unlike FindingsPanel: this list is tens of rows and
- * changes only when a rules file is loaded, so there's nothing to protect
- * against here.
+ * The active rule set, a pattern tester, and saving a tested pattern as a
+ * rule in the active rules file (ADR 004).
  */
 export const RulesPanel = memo(function RulesPanel({
   rules,
@@ -32,8 +32,14 @@ export const RulesPanel = memo(function RulesPanel({
   preview,
   previewError,
   onPreviewPatternChange,
+  onSaveRule,
   hasDocument,
 }: Props) {
+  const [ruleId, setRuleId] = useState("");
+  const [ruleName, setRuleName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   if (rules.length === 0) {
     return (
       <div className="flex h-full flex-col overflow-y-auto">
@@ -47,6 +53,30 @@ export const RulesPanel = memo(function RulesPanel({
   const userCount = rules.filter((r) => r.source === "user").length;
   const validatedCount = rules.filter((r) => r.validated).length;
   const fileName = rulesPath?.replace(/^.*[\\/]/, "");
+  const canSave =
+    previewPattern !== "" &&
+    previewError === null &&
+    ruleId.trim() !== "" &&
+    ruleName.trim() !== "" &&
+    !saving;
+
+  const save = async () => {
+    setSaving(true);
+    const result = await onSaveRule(ruleId.trim(), ruleName.trim());
+    setSaving(false);
+    switch (result.status) {
+      case "saved":
+        setRuleId("");
+        setRuleName("");
+        setSaveError(null);
+        break;
+      case "cancelled":
+        break;
+      case "error":
+        setSaveError(result.message);
+        break;
+    }
+  };
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
@@ -109,6 +139,45 @@ export const RulesPanel = memo(function RulesPanel({
             <span className="text-muted">Checking…</span>
           )}
         </div>
+
+        {previewPattern !== "" && previewError === null && (
+          <div className="mt-2 border-t border-border pt-2">
+            <div className="flex gap-1.5">
+              <input
+                value={ruleId}
+                onChange={(e) => setRuleId(e.target.value)}
+                placeholder="id, e.g. badge_number"
+                spellCheck={false}
+                aria-label="Rule id"
+                className="w-1/2 rounded-md border border-border bg-surface-sunken px-2 py-1 font-mono text-xs outline-none focus:border-accent focus:ring-2 focus:ring-accent"
+              />
+              <input
+                value={ruleName}
+                onChange={(e) => setRuleName(e.target.value)}
+                placeholder="Name"
+                aria-label="Rule name"
+                className="w-1/2 rounded-md border border-border bg-surface-sunken px-2 py-1 text-xs outline-none focus:border-accent focus:ring-2 focus:ring-accent"
+              />
+            </div>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              <span className="truncate text-[11px] text-muted">
+                Saves to {fileName ?? "a new rules file"}
+              </span>
+              <button
+                onClick={() => void save()}
+                disabled={!canSave}
+                className="shrink-0 rounded-md bg-accent px-2 py-1 text-xs font-medium text-surface-raised hover:opacity-90 disabled:opacity-40"
+              >
+                {saving ? "Saving…" : "Save as rule"}
+              </button>
+            </div>
+            {saveError && (
+              <div className="mt-1 whitespace-pre-wrap wrap-break-word text-xs text-pending">
+                {saveError}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="border-b border-border px-4 py-3">

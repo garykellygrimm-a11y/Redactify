@@ -15,7 +15,7 @@ use crate::error::RedactifyError;
 /// guaranteed linear-time), so the only resource a hostile pattern can
 /// attack is memory at compile time. This cap closes that door. Builtins
 /// are exempt: we wrote them, and they compile in tests.
-const USER_PATTERN_SIZE_LIMIT: usize = 1 << 20; // 1 MiB
+pub(crate) const USER_PATTERN_SIZE_LIMIT: usize = 1 << 20; // 1 MiB
 
 /// A detection rule: a named, compiled pattern.
 #[derive(Debug)]
@@ -584,7 +584,7 @@ struct RuleSpec {
 }
 
 /// Compile one user pattern under the size cap.
-fn compile_user_pattern(
+pub(crate) fn compile_user_pattern(
     id: &str,
     pattern: &str,
     size_limit: usize,
@@ -602,7 +602,7 @@ fn compile_user_pattern(
 /// invalid or duplicate rule aborts the whole load. A partially-applied
 /// rule set would produce output the user wrongly believes is fully
 /// redacted — the one failure mode this tool must never have (ADR 002).
-fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyError> {
+pub(crate) fn parse_rules(text: &str, size_limit: usize) -> Result<Vec<Rule>, RedactifyError> {
     let file: RuleFile = toml::from_str(text)?;
 
     let mut seen: HashSet<String> = HashSet::new();

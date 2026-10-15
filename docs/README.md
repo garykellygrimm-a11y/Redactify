@@ -5,8 +5,8 @@
 - [Desktop app](user-guide/desktop-app.md) — opening a file, reviewing
   findings, exporting, and keyboard shortcuts
 - [Command line](user-guide/cli.md) — `scan`, `verify`, and `batch`
-- [Custom rules](user-guide/custom-rules.md) — writing rules files, pattern
-  syntax, and the pattern tester
+- [Custom rules](user-guide/custom-rules.md) — writing rules files, the
+  app's remembered rules file, pattern syntax, and testing and saving patterns
 - [The audit manifest](user-guide/audit-manifest.md) — what it records and
   how to verify a redaction
 
@@ -41,3 +41,4 @@ Start with [CONTRIBUTING](../CONTRIBUTING.md), then:
 - [ADR 001: Audit manifest content](adr/001-manifest-content.md)
 - [ADR 002: User-defined rules](adr/002-user-rules.md)
 - [ADR 003: Logging](adr/003-logging.md)
+- [ADR 004: Rule persistence](adr/004-rule-persistence.md)

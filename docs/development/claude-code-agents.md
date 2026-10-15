@@ -11,7 +11,7 @@ pre-merge-reviewer agent on this branch".
 | Agent | Definition | Changes files |
 | --- | --- | --- |
 | `docs-writer` | `.claude/agents/docs-writer.md` | Markdown documentation only |
-| `pre-merge-reviewer` | `.claude/agents/pre-merge-reviewer.md` | Never |
+| `pre-merge-reviewer` | `.claude/agents/pre-merge-reviewer.md` | Never, by instruction |
 
 ## docs-writer
 

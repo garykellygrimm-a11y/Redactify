@@ -229,11 +229,10 @@ fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("Could not find the app's config folder: {e}"))
 }
 
-/// Create `dir` if needed, readable only by the user on macOS and Linux.
+/// Create `dir` if needed and make it readable only by the user on macOS
+/// and Linux. The mode is set even when the folder exists, because a plugin
+/// such as window-state may have created it first with default permissions.
 fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
-    if dir.exists() {
-        return Ok(());
-    }
     std::fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
@@ -719,6 +718,12 @@ pub fn run() {
                 *state.rules_error.lock().map_err(|_| POISONED)? = startup_error;
             }
 
+            // Best effort: a folder we cannot tighten still works, and the
+            // files the app writes into it are private regardless.
+            if let Ok(dir) = config_dir(&handle) {
+                let _ = ensure_private_dir(&dir);
+            }
+
             let recent = load_recent(&handle);
             *app.state::<AppState>().recent.lock().unwrap() = recent.clone();
 
@@ -813,6 +818,26 @@ mod tests {
             state.rules.lock().expect("lock").len(),
             builtin_rules().len()
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_config_folder_is_made_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = dir.path().join("config");
+        std::fs::create_dir(&config).expect("mkdir");
+        std::fs::set_permissions(&config, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+
+        ensure_private_dir(&config).expect("ensure");
+
+        let mode = std::fs::metadata(&config)
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o700);
     }
 
     #[test]

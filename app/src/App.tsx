@@ -75,6 +75,11 @@ export interface RulesOutcome {
   warning: string | null;
 }
 
+export type SaveRuleResult =
+  | { status: "saved" }
+  | { status: "cancelled" }
+  | { status: "error"; message: string };
+
 export interface RulesStatus {
   rules_path: string | null;
   rule_count: number;
@@ -129,6 +134,7 @@ function App() {
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [review, setReview] = useState<Review>(emptyReview(0));
   const [rulesInfo, setRulesInfo] = useState<RulesInfo | null>(null);
+  const [rulesFailed, setRulesFailed] = useState(false);
   const [rules, setRules] = useState<RuleView[]>([]);
   const [previewPattern, setPreviewPattern] = useState("");
   const [previewSyntax, setPreviewSyntax] = useState<PatternSyntax>("glob");
@@ -276,6 +282,7 @@ function App() {
           setRulesInfo({ path: status.rules_path, count: status.rule_count });
         }
         if (status.error) {
+          setRulesFailed(true);
           setError(
             `Your rules file did not load, so only builtin rules are active.\n${status.error}`,
           );
@@ -311,6 +318,7 @@ function App() {
   const applyRulesOutcome = useCallback(
     (result: RulesOutcome) => {
       setRulesInfo({ path: result.rules_path, count: result.rule_count });
+      setRulesFailed(false);
       void refreshRules();
       if (result.rescanned) {
         setOutcome(result.rescanned);
@@ -360,11 +368,10 @@ function App() {
     }
   }, [outcome, confirmDiscard, applyRulesOutcome]);
 
-  /** Returns an error message, or null once the rule is saved. */
   const saveRule = useCallback(
-    async (id: string, name: string): Promise<string | null> => {
+    async (id: string, name: string): Promise<SaveRuleResult> => {
       // Saving re-scans like a load, which still resets the review.
-      if (outcome && !(await confirmDiscard())) return null;
+      if (outcome && !(await confirmDiscard())) return { status: "cancelled" };
       try {
         setError(null);
         applyRulesOutcome(
@@ -376,9 +383,9 @@ function App() {
           }),
         );
         setPreviewPattern("");
-        return null;
+        return { status: "saved" };
       } catch (e) {
-        return String(e);
+        return { status: "error", message: String(e) };
       }
     },
     [outcome, confirmDiscard, applyRulesOutcome, previewPattern, previewSyntax],
@@ -659,6 +666,7 @@ function App() {
     <div className="flex h-screen flex-col font-sans">
       <TopBar
         rulesInfo={rulesInfo}
+        rulesFailed={rulesFailed}
         textSize={textSize}
         onChangeTextSize={changeTextSize}
         onOpenHelp={() => setHelpOpen(true)}

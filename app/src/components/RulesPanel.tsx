@@ -1,5 +1,10 @@
 import { memo, useState } from "react";
-import type { PatternPreview, PatternSyntax, RuleView } from "../App";
+import type {
+  PatternPreview,
+  PatternSyntax,
+  RuleView,
+  SaveRuleResult,
+} from "../App";
 
 interface Props {
   rules: RuleView[];
@@ -10,17 +15,13 @@ interface Props {
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
-  onSaveRule: (id: string, name: string) => Promise<string | null>;
+  onSaveRule: (id: string, name: string) => Promise<SaveRuleResult>;
   hasDocument: boolean;
 }
 
 /**
  * The active rule set, a pattern tester, and saving a tested pattern as a
  * rule in the active rules file (ADR 004).
- *
- * Not memoized, unlike FindingsPanel: this list is tens of rows and
- * changes only when a rules file is loaded, so there's nothing to protect
- * against here.
  */
 export const RulesPanel = memo(function RulesPanel({
   rules,
@@ -61,12 +62,19 @@ export const RulesPanel = memo(function RulesPanel({
 
   const save = async () => {
     setSaving(true);
-    const err = await onSaveRule(ruleId.trim(), ruleName.trim());
+    const result = await onSaveRule(ruleId.trim(), ruleName.trim());
     setSaving(false);
-    setSaveError(err);
-    if (err === null) {
-      setRuleId("");
-      setRuleName("");
+    switch (result.status) {
+      case "saved":
+        setRuleId("");
+        setRuleName("");
+        setSaveError(null);
+        break;
+      case "cancelled":
+        break;
+      case "error":
+        setSaveError(result.message);
+        break;
     }
   };
 

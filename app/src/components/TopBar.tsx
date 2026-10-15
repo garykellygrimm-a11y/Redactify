@@ -6,6 +6,8 @@ import type { RulesInfo } from "../App";
 
 interface Props {
   rulesInfo: RulesInfo | null;
+  /** The remembered rules file failed to load, so only builtins are active. */
+  rulesFailed: boolean;
   textSize: TextSize;
   onChangeTextSize: (direction: 1 | -1) => void;
   onOpenHelp: () => void;
@@ -22,6 +24,7 @@ const SIZE_LABEL: Record<TextSize, string> = {
 
 export function TopBar({
   rulesInfo,
+  rulesFailed,
   textSize,
   onChangeTextSize,
   onOpenHelp,
@@ -47,6 +50,14 @@ export function TopBar({
           title={`${rulesInfo.path} · ${rulesInfo.count} rules active`}
         >
           rules: {rulesFile} · {rulesInfo.count}
+        </span>
+      )}
+      {!rulesInfo && rulesFailed && (
+        <span
+          className="rounded-full border border-pending px-2 py-0.5 text-xs text-pending"
+          title="Your rules file did not load. Fix it, then load it with File → Load Rules."
+        >
+          rules: builtin only
         </span>
       )}
       <div className="ml-auto flex items-center gap-2">

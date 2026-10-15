@@ -3,6 +3,7 @@ import type {
   PatternPreview,
   PatternSyntax,
   RuleView,
+  SaveRuleResult,
   ScanOutcome,
 } from "../App";
 import type { Review, Verdict } from "../review";
@@ -20,7 +21,7 @@ interface Props {
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
-  onSaveRule: (id: string, name: string) => Promise<string | null>;
+  onSaveRule: (id: string, name: string) => Promise<SaveRuleResult>;
   onFocus: (index: number) => void;
   onDecide: (index: number, verdict: Verdict) => void;
   onDecideGroup: (indices: number[], verdict: Verdict) => void;
@@ -34,10 +35,10 @@ type Tab = "findings" | "rules";
  * this shell is cheap and re-renders freely.
  *
  * Rules live here in the sidebar rather than in a modal on purpose. The
- * editor arriving in the next stage highlights matches live in the open
- * document, which means the pattern being edited and the document have to
- * be visible at the same time — a full-screen modal like HelpPanel would
- * cover exactly what you need to watch.
+ * pattern tester highlights matches live in the open document, so the
+ * pattern and the document have to be visible at the same time — a
+ * full-screen modal like HelpPanel would cover exactly what you need to
+ * watch.
  */
 export function Sidebar({
   outcome,

@@ -81,6 +81,7 @@ $ python scripts/check-tauri-versions.py
 From `app/`:
 
 ```console
+$ npm test
 $ npm run build
 ```
 
@@ -88,6 +89,9 @@ These mirror the required CI checks; [CI checks](docs/development/ci.md)
 explains each one and how to fix a failure. For frontend changes, also check
 the change in both light and dark themes. New detection rules need tests; see
 [Testing](docs/development/testing.md#testing-a-detection-rule).
+
+If you use Claude Code, the repository includes a pre-merge review agent and a
+documentation agent; see [Claude Code agents](docs/development/claude-code-agents.md).
 
 ## Pull requests
 

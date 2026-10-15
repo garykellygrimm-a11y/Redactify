@@ -64,15 +64,22 @@ Runs, from `app/` on Node 24:
 
 ```console
 $ npm ci
+$ npm test
 $ npm run build
 ```
 
-`npm run build` runs `tsc` to type-check the frontend, then `vite build`.
+`npm test` runs the frontend tests with Vitest; see
+[Testing](testing.md#running-the-tests). `npm run build` runs `tsc` to
+type-check the frontend, then `vite build`. The tests run first, so a failing
+test stops the job before the build.
 
 **On failure:**
 
 - *`npm ci` fails:* `package.json` and `package-lock.json` disagree. Run
   `npm install` in `app/` and commit the updated lockfile.
+- *`npm test` fails:* run `npm test` in `app/` to reproduce, then fix the
+  code or the test. Vitest names the failing test and shows the expected and
+  received values.
 - *`tsc` fails:* fix the reported type errors. Dependency updates to React,
   Vite, or TypeScript are the usual cause.
 

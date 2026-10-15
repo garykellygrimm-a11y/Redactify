@@ -28,6 +28,8 @@ Start with [CONTRIBUTING](../CONTRIBUTING.md), then:
   pairs, and toolchains
 - [Releasing](development/releasing.md) — how releases happen and how to
   choose a version
+- [Claude Code agents](development/claude-code-agents.md) — the
+  documentation and pre-merge review agents, and when to run each
 
 ## Project
 

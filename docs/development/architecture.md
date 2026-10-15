@@ -27,8 +27,12 @@ output looks like:
 - **The manifest.** Building the audit manifest and verifying one.
 
 The core never opens documents or writes output; the front ends own all of
-that. The one exception is `load_rules_file()`, which reads a rules file from
-a path it is given.
+that. The exceptions are rules files: `load_rules_file()` reads a rules file
+from a path it is given, and `append_rule()` adds one rule to a rules file,
+creating it if needed. `append_rule()` validates the rule and the file as
+`load_rules_file()` would, edits the TOML with `toml_edit` so comments and
+layout are kept, and replaces the file atomically while keeping its
+permissions (`ReplaceFileW` on Windows).
 
 Detection and redaction logic belongs in the core, never in a front end. When
 it is unclear which side a change belongs on, it belongs in the core.
@@ -43,8 +47,18 @@ recorded as accepted.
 
 The desktop app is a Tauri application. Its Rust side, `app/src-tauri`, holds
 the session state and exposes commands to the frontend: `open_file`,
-`load_rules`, `list_rules`, `preview_pattern`, `close_document`, and
-`export`. Its React side, `app/src`, is the review interface.
+`load_rules`, `save_rule`, `rules_status`, `list_rules`, `preview_pattern`,
+`close_document`, and `export`. Its React side, `app/src`, is the review
+interface.
+
+The Rust side also persists a little state between launches. The active rules
+file's path is stored in `settings.json` in the app config directory and
+loaded at startup; a load failure is kept in session state and reported to
+the frontend through `rules_status`. Recent files are stored in
+`recent_files.json` in the app data directory. `save_rule` appends to the
+active rules file, or to `rules.toml` in the app config directory if none is
+active, through the core's `append_rule()`, then reloads the file and
+rescans the open document.
 
 A document moves through the app like this:
 
@@ -95,3 +109,4 @@ Foundational decisions are recorded as architecture decision records:
 - [ADR 001: Audit manifest content](../adr/001-manifest-content.md)
 - [ADR 002: User-defined rules](../adr/002-user-rules.md)
 - [ADR 003: Logging](../adr/003-logging.md)
+- [ADR 004: Rule persistence](../adr/004-rule-persistence.md)

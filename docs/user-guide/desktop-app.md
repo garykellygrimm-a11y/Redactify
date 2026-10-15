@@ -16,15 +16,18 @@ Open a text file in any of these ways:
 The file is scanned as soon as it opens. Every finding is highlighted in the
 document, colored by the rule that found it.
 
-If a review is in progress, opening another file, closing the document, or
-loading new rules asks for confirmation first, because it discards your
-decisions.
+If a review is in progress, opening another file, closing the document,
+loading new rules, or saving a rule from the pattern tester asks for
+confirmation first, because it discards your decisions.
 
 ## The window
 
+- **The top bar** shows the active rules file and the number of active rules
+  when a rules file is loaded.
 - **The sidebar** has two tabs. **Findings** lists every finding, grouped by
   rule. **Rules** lists every active rule and, from version 0.7.0, holds the
-  pattern tester; see [Custom rules](custom-rules.md).
+  pattern tester, which can also save a tested pattern as a rule; see
+  [Custom rules](custom-rules.md).
 - **The document** shows the file with each finding highlighted. Accepted
   findings appear as `[REDACTED:<rule_id>]`, so the document is a live preview
   of the output.
@@ -86,6 +89,14 @@ how to verify it.
 
 Both settings, and the window's size and position, are remembered between
 launches.
+
+## Rules between launches
+
+The app remembers the last rules file you loaded or saved a rule to, and
+loads it again at startup. If it fails to load, a banner at the top of the
+window shows the error and the app runs with builtin rules only. See
+[The active rules file](custom-rules.md#the-active-rules-file) for where this
+is stored and how to recover.
 
 ## Keyboard shortcuts
 

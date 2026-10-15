@@ -41,8 +41,9 @@ backslash must be doubled (`"\\bPRJ-\\d+\\b"`).
 ## Using a rules file
 
 **Desktop app:** **File → Load Rules** (`Ctrl+L`). The open document is
-rescanned with the new rules. The app does not yet remember the rules file
-between launches, so load it again after restarting.
+rescanned with the new rules. The chosen file becomes the app's active rules
+file and is loaded again each time the app starts; see
+[The active rules file](#the-active-rules-file).
 
 **CLI:** pass `--rules` to `scan` or `batch`:
 
@@ -51,6 +52,53 @@ $ redactify-cli scan input.log --rules my-rules.toml -o clean.log
 ```
 
 Add `--no-builtins` to scan with only your rules.
+
+## The active rules file
+
+The desktop app has at most one active rules file. Its rules are merged over
+the builtin rules, and its name and the number of active rules are shown in
+the top bar.
+
+The app remembers the active file's path in `settings.json` in its config
+folder and loads the file again at startup. The config folder is Tauri's
+standard app config directory, named after the app's identifier
+`com.garykellygrimm.redactify`:
+
+| Platform | Config folder |
+| --- | --- |
+| Windows | `%APPDATA%\com.garykellygrimm.redactify` |
+| macOS | `~/Library/Application Support/com.garykellygrimm.redactify` |
+| Linux | `$XDG_CONFIG_HOME/com.garykellygrimm.redactify`, usually `~/.config/com.garykellygrimm.redactify` |
+
+Loading a different file with **File → Load Rules** makes that file active
+and remembers it instead. If the app cannot write `settings.json`, the rules
+still apply for this session, and the banner says
+`The rules are active, but will not be remembered next time:` followed by the
+reason.
+
+If the remembered file is missing or invalid at startup, the app does not
+skip it silently. The banner shows
+`Your rules file did not load, so only builtin rules are active.` followed by
+the error, and the app scans with builtin rules only. The path stays
+remembered, so the same error appears at each launch until the file is fixed
+or another file is loaded. Fix the file, then load it again with
+**File → Load Rules**.
+
+The CLI never reads `settings.json` or the app's config folder. It uses only
+the file passed with `--rules`, so to use the app's rules in the CLI, pass the
+same file:
+
+```powershell
+redactify-cli scan input.log --rules "$env:APPDATA\com.garykellygrimm.redactify\rules.toml" -o clean.log
+```
+
+On macOS and Linux, `settings.json` and a `rules.toml` created by the app are
+readable only by your user (mode `0600`). The app does not encrypt rules
+files. Custom rules can reveal what your organization treats as sensitive, so
+protect them as you protect the documents they apply to: use full-disk
+encryption, such as BitLocker, FileVault, or dm-crypt, on machines that hold
+sensitive documents. See [ADR 004](../adr/004-rule-persistence.md) for the
+reasoning.
 
 ## Replacing a builtin rule
 
@@ -107,6 +155,11 @@ Every error starts with the path of the rules file, such as
 | A missing field | ``TOML parse error ... missing field `name` `` |
 | An unknown key | ``TOML parse error ... unknown field `rule`, expected `rules` `` |
 
+Saving a rule from the app can also report
+``cannot add a rule: `rules` must be a list of [[rules]] tables``, after the
+same `rules file '...': ` prefix, or, if the file cannot be written,
+`could not write rules file '...': ` followed by the system's reason.
+
 ## Testing a pattern in the app
 
 The pattern tester was added in version 0.7.0.
@@ -134,5 +187,36 @@ So `*@example.com` matches whole addresses such as `alice@example.com`
 without running across spaces. `*` also matches punctuation, so in
 `<alice@example.com>` the match includes the `<`.
 
-The tester previews a pattern; it does not save it. To use a pattern for real,
-copy the regular expression it shows into a rules file.
+## Saving a tested pattern as a rule
+
+Once the tester holds a valid pattern, fields for a rule id and a name appear
+below it, with a **Save as rule** button. The line beside the button shows
+where the rule will go: the active rules file, or "a new rules file" if none is
+active. In that case the app creates `rules.toml` in its config folder (see
+[The active rules file](#the-active-rules-file)) and makes it active.
+
+In Simple mode, the regular expression the tester generated is saved, not the
+wildcard pattern. The pattern is written in single quotes, as recommended
+above, unless it contains a single quote.
+
+A saved rule is checked exactly like a rule in a loaded file. Nothing is
+written if the pattern is invalid, if the id is already used in the file, or if
+the file itself no longer loads. The error appears below the button, in the
+same form as the errors in [Errors](#errors). A saved rule whose id matches a
+builtin replaces that builtin, as in
+[Replacing a builtin rule](#replacing-a-builtin-rule).
+
+Saving adds the rule at the end of the file and leaves everything else as it
+was, including comments, blank lines, and the order of existing rules. The
+app reads the file from disk just before writing, so edits made in another
+editor since it was loaded are kept. The file is replaced in one step, so a
+crash during a save leaves either the old file or the new one, and an
+existing file keeps its permissions.
+
+After saving, the app loads the file again and rescans the open document.
+This resets the review, as loading a rules file does, so any accept or reject
+decisions are lost. If a review is in progress, the app asks for
+confirmation before saving.
+
+If the remembered rules file failed to load at startup, saving is refused
+until the file is fixed and loaded again with **File → Load Rules**.

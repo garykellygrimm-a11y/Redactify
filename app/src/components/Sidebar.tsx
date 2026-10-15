@@ -20,6 +20,7 @@ interface Props {
   preview: PatternPreview | null;
   previewError: string | null;
   onPreviewPatternChange: (pattern: string) => void;
+  onSaveRule: (id: string, name: string) => Promise<string | null>;
   onFocus: (index: number) => void;
   onDecide: (index: number, verdict: Verdict) => void;
   onDecideGroup: (indices: number[], verdict: Verdict) => void;
@@ -49,6 +50,7 @@ export function Sidebar({
   preview,
   previewError,
   onPreviewPatternChange,
+  onSaveRule,
   onFocus,
   onDecide,
   onDecideGroup,
@@ -95,6 +97,7 @@ export function Sidebar({
             preview={preview}
             previewError={previewError}
             onPreviewPatternChange={onPreviewPatternChange}
+            onSaveRule={onSaveRule}
             hasDocument={outcome !== null}
           />
         )}

@@ -2,6 +2,7 @@ mod error;
 mod finding;
 mod manifest;
 mod rules;
+mod rules_write;
 
 pub use error::RedactifyError;
 pub use finding::Finding;
@@ -10,6 +11,7 @@ pub use rules::{
     Rule, RuleInfo, builtin_rules, compile_preview_rule, glob_to_regex, load_rules_file,
     merge_rules,
 };
+pub use rules_write::append_rule;
 
 /// Scan `text` with `rules`, returning findings sorted by start offset,
 /// with overlaps resolved (earliest start wins; on a tie, longest match wins).

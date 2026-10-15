@@ -4,8 +4,8 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 use redactify_core::{
-    builtin_rules, compile_preview_rule, detect, glob_to_regex, load_rules_file, merge_rules,
-    redact, sha256_hex, Disposition, Finding, Manifest, Rule, RuleInfo,
+    append_rule, builtin_rules, compile_preview_rule, detect, glob_to_regex, load_rules_file,
+    merge_rules, redact, sha256_hex, Disposition, Finding, Manifest, Rule, RuleInfo,
 };
 use serde::{Deserialize, Serialize};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -49,6 +49,11 @@ struct AppState {
     user_rule_ids: Mutex<HashSet<String>>,
     document: Mutex<Option<OpenDocument>>,
     recent: Mutex<Vec<String>>,
+    /// The active rules file, if any (ADR 004).
+    rules_path: Mutex<Option<String>>,
+    /// Why the remembered rules file failed to load at startup, until a
+    /// rules file loads successfully.
+    rules_error: Mutex<Option<String>>,
 }
 
 impl Default for AppState {
@@ -58,9 +63,13 @@ impl Default for AppState {
             user_rule_ids: Mutex::new(HashSet::new()),
             document: Mutex::new(None),
             recent: Mutex::new(Vec::new()),
+            rules_path: Mutex::new(None),
+            rules_error: Mutex::new(None),
         }
     }
 }
+
+const POISONED: &str = "Internal error: the app's state is unavailable. Restart Redactify.";
 
 /// What the success screen shows.
 #[derive(Serialize)]
@@ -116,6 +125,16 @@ struct RulesOutcome {
     rules_path: String,
     rule_count: usize,
     rescanned: Option<ScanOutcome>,
+    /// Set when the rules are active but could not be remembered.
+    warning: Option<String>,
+}
+
+/// The active rule set at any time, including a startup load failure.
+#[derive(Serialize)]
+struct RulesStatus {
+    rules_path: Option<String>,
+    rule_count: usize,
+    error: Option<String>,
 }
 
 /// Split `text` into lines of alternating plain/finding segments.
@@ -196,6 +215,75 @@ fn scan(path: String, text: String, rules: &[Rule]) -> (ScanOutcome, OpenDocumen
 // ---------------------------------------------------------------------------
 
 const RECENT_FILES_CAP: usize = 5;
+
+/// App settings that persist between launches (ADR 004).
+#[derive(Serialize, Deserialize, Default)]
+struct Settings {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    rules_file: Option<String>,
+}
+
+fn config_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map_err(|e| format!("Could not find the app's config folder: {e}"))
+}
+
+/// Create `dir` if needed, readable only by the user on macOS and Linux.
+fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
+    if dir.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+fn load_settings(app: &tauri::AppHandle) -> Result<Settings, String> {
+    let path = config_dir(app)?.join("settings.json");
+    match std::fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str(&text)
+            .map_err(|e| format!("Settings file '{}' is invalid: {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Settings::default()),
+        Err(e) => Err(format!(
+            "Could not read settings file '{}': {e}",
+            path.display()
+        )),
+    }
+}
+
+fn save_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
+    let dir = config_dir(app)?;
+    ensure_private_dir(&dir).map_err(|e| format!("Could not create '{}': {e}", dir.display()))?;
+    let path = dir.join("settings.json");
+    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options
+        .open(&path)
+        .map_err(|e| format!("Could not write '{}': {e}", path.display()))?;
+    std::io::Write::write_all(&mut file, json.as_bytes())
+        .map_err(|e| format!("Could not write '{}': {e}", path.display()))
+}
+
+/// Remember `path` as the active rules file. Returns a warning if it could
+/// not be remembered; the rules are active either way.
+fn remember_rules_file(app: &tauri::AppHandle, path: &str) -> Option<String> {
+    let mut settings = load_settings(app).unwrap_or_default();
+    settings.rules_file = Some(path.to_string());
+    save_settings(app, &settings)
+        .err()
+        .map(|e| format!("The rules are active, but will not be remembered next time: {e}"))
+}
 
 fn recent_files_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path()
@@ -347,34 +435,114 @@ fn open_file(
     Ok(outcome)
 }
 
-/// Load a TOML rules file: fail-fast validation, merge over builtins,
-/// become the session's active rule set. If a document is open, re-scan
-/// it now — new rules silently NOT applying to the visible document
-/// would be a false sense of coverage.
-#[tauri::command]
-fn load_rules(path: String, state: State<AppState>) -> Result<RulesOutcome, String> {
-    let user = load_rules_file(&PathBuf::from(&path)).map_err(|e| e.to_string())?;
+/// Make the rules file at `path` the active rule set, merged over builtins.
+fn activate_rules_file(state: &AppState, path: &str) -> Result<usize, String> {
+    let user = load_rules_file(Path::new(path)).map_err(|e| e.to_string())?;
     // Capture which ids the user supplied BEFORE merging — afterwards the
     // two are indistinguishable.
     let user_ids: HashSet<String> = user.iter().map(|r| r.id.clone()).collect();
     let merged = merge_rules(builtin_rules(), user);
     let rule_count = merged.len();
-    *state.user_rule_ids.lock().unwrap() = user_ids;
+    *state.user_rule_ids.lock().map_err(|_| POISONED)? = user_ids;
+    *state.rules.lock().map_err(|_| POISONED)? = merged;
+    *state.rules_path.lock().map_err(|_| POISONED)? = Some(path.to_string());
+    *state.rules_error.lock().map_err(|_| POISONED)? = None;
+    Ok(rule_count)
+}
 
-    let mut rules = state.rules.lock().unwrap();
-    *rules = merged;
-
-    let mut doc_guard = state.document.lock().unwrap();
-    let rescanned = doc_guard.take().map(|doc| {
+/// Re-scan the open document, if any, with the active rules. New rules
+/// silently NOT applying to the visible document would be a false sense
+/// of coverage.
+fn rescan(state: &AppState) -> Result<Option<ScanOutcome>, String> {
+    let rules = state.rules.lock().map_err(|_| POISONED)?;
+    let mut doc_guard = state.document.lock().map_err(|_| POISONED)?;
+    Ok(doc_guard.take().map(|doc| {
         let (outcome, new_doc) = scan(doc.path, doc.text, &rules);
         *doc_guard = Some(new_doc);
         outcome
-    });
+    }))
+}
 
+/// Load a TOML rules file: fail-fast validation, merge over builtins,
+/// become the session's active rule set, and be remembered for next launch.
+#[tauri::command]
+fn load_rules(
+    path: String,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<RulesOutcome, String> {
+    let rule_count = activate_rules_file(&state, &path)?;
+    let rescanned = rescan(&state)?;
+    let warning = remember_rules_file(&app, &path);
     Ok(RulesOutcome {
         rules_path: path,
         rule_count,
         rescanned,
+        warning,
+    })
+}
+
+/// Append a tested pattern to the active rules file, creating the app's
+/// default rules file if none is active, then reload it and re-scan.
+#[tauri::command]
+fn save_rule(
+    id: String,
+    name: String,
+    pattern: String,
+    syntax: PatternSyntax,
+    state: State<AppState>,
+    app: tauri::AppHandle,
+) -> Result<RulesOutcome, String> {
+    let (id, name) = (id.trim(), name.trim());
+    if id.is_empty() || name.is_empty() {
+        return Err("A rule needs an id and a name.".to_string());
+    }
+    if state.rules_error.lock().map_err(|_| POISONED)?.is_some() {
+        return Err(
+            "Your rules file did not load, so a rule cannot be saved to it. Fix the \
+             file, then load it again with File → Load Rules."
+                .to_string(),
+        );
+    }
+    let regex = match syntax {
+        PatternSyntax::Glob => glob_to_regex(&pattern),
+        PatternSyntax::Regex => pattern,
+    };
+
+    let active = state.rules_path.lock().map_err(|_| POISONED)?.clone();
+    let target = match active {
+        Some(path) => PathBuf::from(path),
+        None => {
+            let dir = config_dir(&app)?;
+            ensure_private_dir(&dir)
+                .map_err(|e| format!("Could not create '{}': {e}", dir.display()))?;
+            dir.join("rules.toml")
+        }
+    };
+    let target = target
+        .to_str()
+        .ok_or("The rules file's path is not valid UTF-8.")?
+        .to_string();
+
+    append_rule(Path::new(&target), id, name, &regex).map_err(|e| e.to_string())?;
+    let rule_count = activate_rules_file(&state, &target)?;
+    let rescanned = rescan(&state)?;
+    let warning = remember_rules_file(&app, &target);
+    Ok(RulesOutcome {
+        rules_path: target,
+        rule_count,
+        rescanned,
+        warning,
+    })
+}
+
+/// The active rule set, for the frontend at startup.
+#[tauri::command]
+fn rules_status(state: State<AppState>) -> Result<RulesStatus, String> {
+    Ok(RulesStatus {
+        rules_path: state.rules_path.lock().map_err(|_| POISONED)?.clone(),
+        rule_count: state.rules.lock().map_err(|_| POISONED)?.len(),
+        error: state.rules_error.lock().map_err(|_| POISONED)?.clone(),
     })
 }
 
@@ -527,6 +695,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_file,
             load_rules,
+            save_rule,
+            rules_status,
             list_rules,
             preview_pattern,
             close_document,
@@ -534,6 +704,21 @@ pub fn run() {
         ])
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // A remembered rules file that fails to load is reported, never
+            // skipped silently (ADR 004).
+            let state = app.state::<AppState>();
+            let startup_error = match load_settings(&handle) {
+                Ok(Settings {
+                    rules_file: Some(path),
+                }) => activate_rules_file(&state, &path).err(),
+                Ok(Settings { rules_file: None }) => None,
+                Err(e) => Some(e),
+            };
+            if startup_error.is_some() {
+                *state.rules_error.lock().map_err(|_| POISONED)? = startup_error;
+            }
+
             let recent = load_recent(&handle);
             *app.state::<AppState>().recent.lock().unwrap() = recent.clone();
 
@@ -578,4 +763,79 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rules_file(dir: &Path, body: &str) -> String {
+        let path = dir.join("rules.toml");
+        std::fs::write(&path, body).expect("write rules file");
+        path.to_str().expect("utf-8 path").to_string()
+    }
+
+    #[test]
+    fn activating_a_rules_file_makes_it_active_and_clears_a_startup_error() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = rules_file(
+            dir.path(),
+            "[[rules]]\nid = \"badge\"\nname = \"Badge\"\npattern = 'BDG-\\d+'\n",
+        );
+        let state = AppState::default();
+        *state.rules_error.lock().expect("lock") = Some("earlier failure".into());
+
+        let count = activate_rules_file(&state, &path).expect("activates");
+
+        assert_eq!(count, builtin_rules().len() + 1);
+        assert_eq!(
+            state.rules_path.lock().expect("lock").as_deref(),
+            Some(path.as_str())
+        );
+        assert!(state.rules_error.lock().expect("lock").is_none());
+        assert!(state.user_rule_ids.lock().expect("lock").contains("badge"));
+    }
+
+    #[test]
+    fn a_rules_file_that_fails_to_load_changes_nothing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = rules_file(
+            dir.path(),
+            "[[rule]]\nid = \"x\"\nname = \"X\"\npattern = 'a'\n",
+        );
+        let state = AppState::default();
+
+        let err = activate_rules_file(&state, &path).expect_err("fails");
+
+        assert!(err.contains("unknown field `rule`"), "{err}");
+        assert!(state.rules_path.lock().expect("lock").is_none());
+        assert_eq!(
+            state.rules.lock().expect("lock").len(),
+            builtin_rules().len()
+        );
+    }
+
+    #[test]
+    fn rescan_uses_the_active_rules() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = rules_file(
+            dir.path(),
+            "[[rules]]\nid = \"badge\"\nname = \"Badge\"\npattern = 'BDG-\\d+'\n",
+        );
+        let state = AppState::default();
+        assert!(rescan(&state).expect("rescan").is_none());
+
+        let (_, doc) = scan(
+            "doc.log".into(),
+            "badge BDG-42 here".into(),
+            &builtin_rules(),
+        );
+        assert!(doc.findings.is_empty());
+        *state.document.lock().expect("lock") = Some(doc);
+        activate_rules_file(&state, &path).expect("activates");
+
+        let outcome = rescan(&state).expect("rescan").expect("document open");
+        assert_eq!(outcome.findings.len(), 1);
+        assert_eq!(outcome.findings[0].rule_id, "badge");
+    }
 }

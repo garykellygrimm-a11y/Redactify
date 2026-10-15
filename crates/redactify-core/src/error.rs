@@ -38,4 +38,20 @@ pub enum RedactifyError {
         path: String,
         cause: Box<RedactifyError>,
     },
+
+    /// A rules file could not be written.
+    #[error("could not write rules file '{path}': {source}")]
+    RulesWrite {
+        path: String,
+        source: std::io::Error,
+    },
+
+    /// A rules file could not be parsed for editing.
+    #[error("{0}")]
+    RulesEdit(#[from] toml_edit::TomlError),
+
+    /// The file's `rules` key is not a list of `[[rules]]` tables, so a rule
+    /// cannot be appended to it.
+    #[error("cannot add a rule: `rules` must be a list of [[rules]] tables")]
+    RulesLayout,
 }

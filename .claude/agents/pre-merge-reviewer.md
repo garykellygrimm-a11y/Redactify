@@ -1,6 +1,6 @@
 ---
 name: pre-merge-reviewer
-description: Reviews a Redactify branch against main before its pull request merges, checking that each commit holds what its message claims, that nothing landed halfway, and that project rules are followed. Read-only; reports findings and never changes files.
+description: Reviews a Redactify branch against main before its pull request merges, checking that each commit holds what its message claims, that nothing landed halfway, and that project rules are followed. Reports findings only; its instructions forbid changing files.
 tools: Read, Grep, Glob, Bash
 ---
 
